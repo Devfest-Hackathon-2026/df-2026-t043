@@ -1,6 +1,11 @@
 # となりドア (Tonari Door) — 離れて暮らす家族の「声をかけるタイミングがわかる」団らんビデオアプリ
 
 **GDGoC Japan Hackathon 2026 (DF Hack26) 提出プロダクト**
+
+![となりドア パイプラインイメージ](public/assets/pipeline.gif)
+
+図の再生成：Windows の日本語フォントと Python 3.10 以上、Pillow（`python -m pip install Pillow`）を用意し、`python scripts/generate_pipeline_gif.py` を実行します。
+
 - **チーム名**：Generator-Critic (`kaigunn_2020`, `yoikoarmor`)
 - **参加会場**：Tokyo Regional
 - **対象カテゴリ**：1. 医療・福祉（高齢者見守り・遠距離家族ケア・孤立防止）

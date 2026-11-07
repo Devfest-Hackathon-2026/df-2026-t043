@@ -2,6 +2,8 @@
 
 Generator-Critic / GDGoC Japan Hackathon 2026 / 医療・福祉。離れて暮らす家族が「今、声をかけてよいかな」と迷う負担を減らし、顔を見て過ごす団らんにつなげる。
 
+![となりドア パイプラインイメージ](public/assets/pipeline.gif)
+
 ## 実装構成
 
 ```mermaid
