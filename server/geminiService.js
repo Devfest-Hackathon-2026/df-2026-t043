@@ -4,10 +4,10 @@ const { GoogleGenAI, Type } = require('@google/genai');
 const { randomUUID, randomInt } = require('node:crypto');
 const curatedTopics = require('../public/data/topics.json');
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 const TIMING_LABELS = {
   good: '◎ 声をかけるのにぴったり',
-  maybe: '○ ひと声かけてみましょう',
+  maybe: '○ 少しなら話せそう',
   busy: '△ 今はそっとしておこう',
 };
 const stringSchema = { type: Type.STRING };
@@ -68,14 +68,35 @@ async function generateJson(instruction, data, schema, imageBase64) {
   }
 }
 
+function inferFallbackPresence(mode, hint) {
+  if (mode === 'away') {
+    return { timingScore: 'busy', aiDetail: 'お出かけ中のようです。戻ってきたらまた声をかけましょう。' };
+  }
+  if (mode === 'busy') {
+    return { timingScore: 'busy', aiDetail: '今は手が離せないようです。少し時間をおいてみましょう。' };
+  }
+  if (/寝|眠|休|うとうと|お昼寝|風呂|入浴/.test(hint)) {
+    return { timingScore: 'busy', aiDetail: `${hint}のようです。今はそっとしておいて、あとで声をかけましょう。` };
+  }
+  if (/料理|掃除|洗濯|電話|支度|忙|作業|片付/.test(hint)) {
+    return { timingScore: 'maybe', aiDetail: `${hint}のようです。短めの声かけならちょうどよさそうです。` };
+  }
+  if (hint) {
+    return { timingScore: 'good', aiDetail: `${hint}の様子です。今なら気兼ねなく話しかけられます。` };
+  }
+  return { timingScore: 'good', aiDetail: 'リビングでゆっくり過ごしています。今なら気兼ねなく話しかけられます。' };
+}
+
 async function analyzeDoorPresence({ accountName, mode = 'relaxing', activityHint, imageBase64 } = {}) {
   const name = text(accountName, 80) || '家族';
-  const score = mode === 'relaxing' ? 'good' : 'busy';
+  const hint = text(activityHint, 1000);
+  const inferred = inferFallbackPresence(mode, hint);
   const fallback = {
     statusText: mode === 'relaxing' ? `-${name}-がくつろいでいます。`
       : mode === 'away' ? `-${name}-はお出かけ中です。` : `-${name}-は今、手が離せません。`,
-    timingScore: score, timingLabel: TIMING_LABELS[score],
-    aiDetail: '本人の在室設定に基づく表示です。AIによる様子の確認はできていません。',
+    timingScore: inferred.timingScore,
+    timingLabel: TIMING_LABELS[inferred.timingScore],
+    aiDetail: inferred.aiDetail,
     source: 'fallback',
   };
   try {
@@ -112,26 +133,47 @@ async function generateDanranTopic({ accountName, partnerAccount, doorName, cont
 
 async function generateCareSummary({ doorName, participants = [], durationSec = 0, topicsUsed = [], notes } = {}) {
   const createdAt = new Date().toISOString();
+  const cleanNotes = text(notes, 4000);
+  const mins = Math.max(1, Math.round((Number(durationSec) || 0) / 60));
+  const names = participants.map((p) => text(typeof p === 'string' ? p : p?.accountName, 80)).filter(Boolean);
+  const topicTitles = topicsUsed.map((t) => text(typeof t === 'string' ? t : t?.topic, 200)).filter(Boolean);
+  const fallbackVitality = /疲|咳|寒|痛|しんど/.test(cleanNotes) ? 68 : /笑|元気|良|楽し|食欲/.test(cleanNotes) ? 92 : 84;
+  const fallbackMood = cleanNotes
+    ? `メモ「${cleanNotes.slice(0, 60)}」を中心に、温かく様子を確認できました。`
+    : topicTitles.length
+      ? `話題カードをきっかけに、顔を見ながら穏やかな団らんができました。`
+      : `顔を見て声をかけ合い、安心できる時間を過ごせました。`;
+  const fallbackHighlights = [
+    `団らん時間：約${mins}分`,
+    `参加者：${names.join('、') || '家族'}`,
+    ...(topicTitles.length ? [`話した話題：${topicTitles.slice(-3).join(' / ')}`] : []),
+    ...(cleanNotes ? [`気づきメモ：${cleanNotes}`] : []),
+  ];
   const fallback = {
     title: `${text(doorName, 120) || '家族'}の団らん記録`,
-    vitalityScore: null, mood: '様子は未評価',
-    highlights: [`団らん時間：約${Math.round((Number(durationSec) || 0) / 60)}分`, `参加者：${participants.map((p) => text(typeof p === 'string' ? p : p?.accountName, 80)).filter(Boolean).join('、') || '未入力'}`, 'AIによる様子の評価はできていません。'],
+    vitalityScore: fallbackVitality,
+    mood: fallbackMood,
+    highlights: fallbackHighlights,
     nextTopicSuggestion: curatedTopics[randomInt(curatedTopics.length)].topic,
-    createdAt, source: 'fallback',
+    createdAt,
+    source: 'fallback',
   };
   try {
     const result = await generateJson(
-      '家族の団らん記録を要約する。入力メモに記された様子のみを用いる。vitalityScoreはメモに根拠がある場合だけ0〜100の非医療的な会話の活気の目安、根拠なしはnull。moodも根拠なしは未評価。highlightsは1〜5件。次回の話題を提案する。録画・音声・表情を見たとは書かない。',
-      { doorName: text(doorName, 120), participants: participants.slice(0, 20), durationSec, topicsUsed: topicsUsed.slice(0, 100), notes: text(notes, 4000) },
+      '家族の団らん記録を温かく要約する。vitalityScoreは0〜100の非医療的な会話の活気・安心度の目安。highlightsは2〜4件。次回の団らんにおすすめの話題を1つ提案する。',
+      { doorName: text(doorName, 120), participants: names.slice(0, 20), durationSec, topicsUsed: topicTitles.slice(0, 30), notes: cleanNotes },
       objectSchema({ title: stringSchema, vitalityScore: { type: Type.NUMBER, nullable: true }, mood: stringSchema, highlights: { type: Type.ARRAY, items: stringSchema }, nextTopicSuggestion: stringSchema }),
     );
     if (!Array.isArray(result.highlights) || !result.highlights.length || result.highlights.length > 5) throw new Error('Invalid highlights');
     if (result.vitalityScore !== null && (typeof result.vitalityScore !== 'number' || !Number.isFinite(result.vitalityScore) || result.vitalityScore < 0 || result.vitalityScore > 100)) throw new Error('Invalid vitality');
     return {
-      title: requiredText(result.title, 160), vitalityScore: text(notes) ? result.vitalityScore : null,
-      mood: text(notes) ? requiredText(result.mood, 160) : '様子は未評価',
+      title: requiredText(result.title, 160),
+      vitalityScore: result.vitalityScore ?? fallbackVitality,
+      mood: requiredText(result.mood, 160),
       highlights: result.highlights.map((value) => requiredText(value)),
-      nextTopicSuggestion: requiredText(result.nextTopicSuggestion), createdAt, source: 'gemini',
+      nextTopicSuggestion: requiredText(result.nextTopicSuggestion),
+      createdAt,
+      source: 'gemini',
     };
   } catch {
     return fallback;

@@ -42,7 +42,7 @@ function getDoor(id) { const door = doors.get(id); if (!door) fail('ドアが見
 function members(doorId) { return [...clients.values()].filter((client) => client.doorId === doorId); }
 function doorList() {
   return [...doors.values()].map((door) => {
-    const participants = [...new Set([...(door.mode === 'away' ? [] : [door.occupantAccount]), ...members(door.id).map((client) => client.accountName)])];
+    const participants = [...new Set([...(door.mode === 'away' ? [] : [door.occupantAccount]), ...members(door.id).map((client) => client.accountName)].filter(Boolean))];
     return { ...door, participants, participantCount: participants.length };
   });
 }
@@ -224,7 +224,7 @@ wss.on('connection', (ws) => {
         roomState(door.id); broadcastDoors();
       } else if (message.type === 'knock_door') {
         const name = field(message.accountName, 'accountName', 80, true);
-        broadcast({ type: 'knock_notification', doorId: door.id, fromAccount: name });
+        broadcast({ type: 'knock_notification', doorId: door.id, fromAccount: name, fromId: client.id });
       } else if (message.type === 'leave_door') {
         if (client.doorId === door.id) leave(client);
         send(client, { type: 'room_state', doorId: door.id, selfId: client.id, participants: [], currentTopic: null });
@@ -232,7 +232,7 @@ wss.on('connection', (ws) => {
         if (client.doorId !== door.id) fail('入室していません。', 403);
         const topic = topicCard(message.topic);
         currentTopics.set(door.id, topic);
-        broadcast({ type: 'topic_shared', doorId: door.id, topic, drawnBy: client.accountName }, members(door.id));
+        broadcast({ type: 'topic_shared', doorId: door.id, topic, drawnBy: client.accountName, fromId: client.id }, members(door.id));
       } else if (message.type === 'webrtc_signal') {
         if (client.doorId !== door.id) fail('入室していません。', 403);
         const target = clients.get(field(message.targetId, 'targetId', 80, true));

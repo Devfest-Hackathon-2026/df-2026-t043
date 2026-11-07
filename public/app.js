@@ -1073,7 +1073,7 @@
         if (state.room && msg.doorId === state.room.door.id) onRoomState(msg);
         break;
       case 'topic_shared':
-        if (state.room && msg.doorId === state.room.door.id && msg.drawnBy !== state.account && msg.topic) {
+        if (state.room && msg.doorId === state.room.door.id && (msg.fromId ? msg.fromId !== state.clientId : msg.drawnBy !== state.account) && msg.topic) {
           showTopic(msg.topic, { source: 'shared', by: msg.drawnBy });
         }
         break;
@@ -1086,7 +1086,7 @@
   }
 
   function onKnockNotification(msg) {
-    if (!msg.fromAccount || msg.fromAccount === state.account) return;
+    if (!msg.fromAccount || (msg.fromId ? msg.fromId === state.clientId : msg.fromAccount === state.account)) return;
     const door = state.doors.find((d) => d.id === msg.doorId);
     playKnock(2);
     const unit = state.doorEls.get(msg.doorId);
