@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#5a3a1e" />
+  <meta name="description" content="となりドア — 声をかけるタイミングがわかる、家族の団らんドア。ドアの明かりで気配を知り、ノックしてビデオで団らん。" />
+  <title>となりドア — 家族の団らんドア</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ============ 上部コントロールバー ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">🚪</span>
+      <div>
+        <h1 class="brand-title">となりドア</h1>
+        <p class="brand-sub">声をかけるタイミングがわかる、家族の団らんドア</p>
+      </div>
+    </div>
+
+    <div class="controls" id="lobbyControls">
+      <label class="field">
+        <span class="field-label">あなたのアカウント名</span>
+        <input id="accountInput" type="text" maxlength="24" autocomplete="nickname" value="yoikoarmor" aria-describedby="accountPreview" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">くつろぐドア</span>
+        <select id="myDoorSelect" aria-label="自分がくつろぐドアを選ぶ"></select>
+      </label>
+
+      <label class="field">
+        <span class="field-label">いまの様子</span>
+        <select id="modeSelect" aria-label="いまの様子">
+          <option value="relaxing">🛋️ くつろぎ中</option>
+          <option value="busy">🍳 ちょっと手が離せない</option>
+          <option value="away">🚶 お出かけ中</option>
+        </select>
+      </label>
+
+      <button id="setPresenceBtn" class="btn btn-lamp" type="button">
+        🏮 ここでくつろぐ
+      </button>
+      <button id="geminiPresenceBtn" class="btn btn-indigo" type="button">
+        📸 カメラ/状況からGeminiで声かけタイミングを更新
+      </button>
+    </div>
+
+    <div class="conn" id="connStatus" role="status" aria-live="polite">
+      <span class="conn-dot"></span><span class="conn-text">接続中…</span>
+    </div>
+  </header>
+
+  <p class="account-preview" id="accountPreview" aria-live="polite">
+    ドアに出るあなたの気配：<strong id="accountPreviewText">-yoikoarmor-がくつろいでいます。</strong>
+  </p>
+
+  <!-- ============ ロビー（ドアの並ぶ廊下） ============ -->
+  <main id="lobby" class="screen lobby" aria-label="ドアの並ぶ廊下">
+    <section class="hallway-intro">
+      <h2>ドアの明かりを見て、そっと声をかけてみましょう。</h2>
+      <p>明かりが灯っているドアの向こうでは、家族がくつろいでいます。ノックして入ると、顔を見ながらの団らんが始まります。</p>
+    </section>
+
+    <section class="hallway" aria-label="ドア一覧">
+      <div class="door-row" id="doorRow"></div>
+      <div class="hallway-floor" aria-hidden="true"></div>
+    </section>
+
+    <section class="care-notes" aria-labelledby="careNotesTitle">
+      <div class="care-notes-head">
+        <h2 id="careNotesTitle">📓 安心見守りノート</h2>
+        <p>団らんのあとに Gemini がまとめた「様子の記録」です。家族みんなで見返せます。</p>
+      </div>
+      <ol class="care-list" id="careList">
+        <li class="care-empty">まだ記録はありません。ドアをノックして、最初の団らんを始めましょう。</li>
+      </ol>
+    </section>
+
+    <footer class="lobby-foot">
+      <p>🔒 生の映像を見張るのではなく、Gemini が「気配のひとこと」に置きかえて伝えます。　Powered by Gemini 2.5 Flash · Google Cloud Run</p>
+    </footer>
+  </main>
+
+  <!-- ============ 団らんルーム（ビデオ通話） ============ -->
+  <section id="room" class="screen room" hidden aria-label="団らんルーム">
+    <div class="noren" aria-hidden="true">
+      <span class="noren-cloth"></span><span class="noren-cloth"></span><span class="noren-cloth"></span><span class="noren-cloth"></span>
+    </div>
+
+    <header class="room-head">
+      <div class="room-title">
+        <span class="room-icon" id="roomIcon">🍵</span>
+        <div>
+          <h2 id="roomName">実家の茶の間</h2>
+          <p class="room-sub" id="roomSub">温かいお茶とテレビの音</p>
+        </div>
+      </div>
+      <div class="room-meta">
+        <span class="badge badge-video" title="顔を見て安心するために、この部屋ではカメラが常にONです">
+          📹 顔を見て安心するためのビデオ団らん（カメラ常時ON）
+        </span>
+        <span class="badge badge-timer" aria-label="団らん時間">⏱ <span id="roomTimer">00:00</span></span>
+      </div>
+    </header>
+
+    <div class="room-body">
+      <div class="stage-col">
+        <div class="participants" id="participantsBar" aria-label="この部屋にいる人"></div>
+
+        <div class="stage" id="remoteStage" aria-label="家族の映像">
+          <!-- 家族シミュレーター（1人デモ用） -->
+          <figure class="video-tile tile-family" id="simulatorTile">
+            <canvas id="simulatorCanvas" width="960" height="600" aria-label="家族シミュレーター映像"></canvas>
+            <figcaption class="name-tag" id="simulatorName">-おばあちゃん-</figcaption>
+            <div class="reaction-layer"></div>
+          </figure>
+        </div>
+
+        <div class="self-row">
+          <figure class="video-tile tile-self" id="selfTile">
+            <video id="selfVideo" autoplay playsinline muted></video>
+            <figcaption class="name-tag" id="selfName">-yoikoarmor-</figcaption>
+            <span class="tile-note" id="selfCamNote">実カメラ</span>
+            <div class="reaction-layer"></div>
+          </figure>
+
+          <div class="self-controls">
+            <div class="cam-switch" role="radiogroup" aria-label="カメラの種類">
+              <button type="button" class="cam-opt" id="camRealBtn" role="radio" aria-checked="true">📷 実カメラ</button>
+              <button type="button" class="cam-opt" id="camVirtualBtn" role="radio" aria-checked="false">🍵 バーチャル茶の間カメラ</button>
+            </div>
+            <p class="cam-policy">※ この部屋はお互いの顔が見えることを大切にしています。カメラを消すことはできませんが、バーチャル映像に切りかえられます。</p>
+            <div class="mini-controls">
+              <button type="button" class="btn btn-soft" id="micBtn" aria-pressed="false">🎙️ マイク ON</button>
+            </div>
+            <div class="reactions" aria-label="リアクション">
+              <button type="button" class="react" data-emoji="👋" aria-label="手をふる">👋</button>
+              <button type="button" class="react" data-emoji="😊" aria-label="にっこり">😊</button>
+              <button type="button" class="react" data-emoji="😂" aria-label="大笑い">😂</button>
+              <button type="button" class="react" data-emoji="👍" aria-label="いいね">👍</button>
+              <button type="button" class="react" data-emoji="❤️" aria-label="大好き">❤️</button>
+              <button type="button" class="react" data-emoji="🍵" aria-label="お茶どうぞ">🍵</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="side-col">
+        <section class="topic-panel" aria-labelledby="topicPanelTitle">
+          <h3 id="topicPanelTitle">🎴 団らん話題カード</h3>
+
+          <div class="topic-card-wrap">
+            <article class="topic-card is-back" id="topicCard" aria-live="polite">
+              <div class="topic-face topic-back" aria-hidden="true">
+                <span class="back-mark">団</span>
+                <span class="back-text">カードを引いてね</span>
+              </div>
+              <div class="topic-face topic-front">
+                <div class="topic-top">
+                  <span class="topic-category" id="topicCategory">カテゴリ</span>
+                  <span class="topic-source" id="topicSource">100選</span>
+                </div>
+                <p class="topic-text" id="topicText">話題</p>
+                <p class="topic-hint" id="topicHint">💡 ヒント</p>
+              </div>
+            </article>
+          </div>
+
+          <div class="topic-actions">
+            <button type="button" class="btn btn-lamp btn-wide" id="drawTopicBtn">🎲 話題カードをランダムに引く（全100件）</button>
+            <button type="button" class="btn btn-indigo btn-wide" id="geminiTopicBtn">✨ Geminiに今の話題を作ってもらう</button>
+          </div>
+
+          <div class="topic-filter" id="categoryChips" aria-label="カテゴリでしぼる"></div>
+
+          <details class="topic-history">
+            <summary>これまでに引いたカード（<span id="historyCount">0</span>枚）</summary>
+            <ol id="topicHistory"></ol>
+          </details>
+        </section>
+
+        <section class="memo-panel" aria-labelledby="memoTitle">
+          <h3 id="memoTitle">📝 気づきメモ <small>（見守りレポートに使われます）</small></h3>
+          <div class="memo-chips" id="memoChips">
+            <button type="button" class="chip" data-memo="顔色がよさそうだった">😊 顔色よさそう</button>
+            <button type="button" class="chip" data-memo="よく笑っていた">😂 よく笑っていた</button>
+            <button type="button" class="chip" data-memo="ごはんをしっかり食べているようだった">🍚 食欲あり</button>
+            <button type="button" class="chip" data-memo="少し疲れているようだった">😪 少しお疲れ</button>
+            <button type="button" class="chip" data-memo="咳をしていた">😷 咳をしていた</button>
+            <button type="button" class="chip" data-memo="部屋が寒そうだった">🥶 部屋が寒そう</button>
+          </div>
+          <textarea id="memoInput" rows="3" maxlength="800" placeholder="例：声が明るかった。来週の通院の話をした。"></textarea>
+        </section>
+
+        <button type="button" class="btn btn-leave btn-wide" id="leaveBtn">🚪 ドアを閉めて退室（見守り記録を残す）</button>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ ドアが開く演出 ============ -->
+  <div class="door-transition" id="doorTransition" hidden aria-hidden="true">
+    <div class="dt-light"></div>
+    <div class="dt-frame">
+      <div class="dt-door">
+        <div class="dt-glass"></div>
+        <div class="dt-knob"></div>
+      </div>
+    </div>
+    <p class="dt-caption" id="dtCaption">おじゃまします</p>
+  </div>
+
+  <!-- ============ モーダル ============ -->
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button type="button" class="modal-close" id="modalClose" aria-label="閉じる">✕</button>
+      <h2 id="modalTitle">タイトル</h2>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- ============ トースト ============ -->
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

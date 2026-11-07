@@ -1,0 +1,28 @@
+{
+  "name": "tonari-door-danran",
+  "version": "0.1.0",
+  "description": "GDGoC Japan Hackathon 2026 (Medical/Welfare) - 離れて暮らす親に声をかけるタイミングがわかるドア × ビデオ会議の団らん化アプリ",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node server/smokeTest.js"
+  },
+  "keywords": [
+    "gdgoc",
+    "hackathon",
+    "welfare",
+    "family",
+    "gemini",
+    "cloud-run",
+    "webrtc"
+  ],
+  "author": "Generator-Critic (kaigunn_2020, yoikoarmor)",
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}
