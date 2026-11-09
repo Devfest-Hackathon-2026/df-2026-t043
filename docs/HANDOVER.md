@@ -1,9 +1,9 @@
 # 『となりドア (Tonari Door)』— プロジェクト引継ぎ資料 (HANDOVER.md)
 
-**最終更新日時**：2026年11月10日 00:27 JST
+**最終更新日時**：2026年11月10日 00:29 JST
 **対象**：チームメンバー（`yoikoarmor(小沢司)`, `suzukimain(鈴木崇博)`）および後続のすべてのAIエージェント
 
-> **最新状態（2026-11-10 README改訂・GitHub反映）**：最終PDFと表記整合に加え、READMEの目的・対象ユーザー・提出物リンク・設定手順を更新。ユーザーからmainへのpushを明示承認済み。第13節参照。本番デプロイは今回の対象に含めない。
+> **最新状態（2026-11-10 GitHub反映済み）**：README・最終PDF・説明資料・表記整合を本体コミット `e1b4912` として `origin/main` へpush済み。本節はその結果追記。第13節参照。本番デプロイ操作は行っていない。
 
 ---
 
@@ -15,7 +15,7 @@
 | **チーム名** | Generator-Critic |
 | **メンバー** | **yoikoarmor(小沢司)、suzukimain(鈴木崇博)** |
 | **アプリ名 / カテゴリ** | **「となりドア (Tonari Door)」** / **1. 医療・福祉** |
-| **GitHub リポジトリ** | https://github.com/yoikoarmor/GDG-hackathon （ローカルHEAD・origin/mainとも `f699081`。表記整合の未コミット変更あり） |
+| **GitHub リポジトリ** | https://github.com/yoikoarmor/GDG-hackathon （本体変更 `e1b4912` はmainへpush済み。最新コミットは本資料の結果追記を含むgit logで確認） |
 | **本番デプロイURL (Cloud Run)** | https://gdg-hackathon-752978143113.asia-northeast1.run.app/ |
 | **ローカル実行URL** | `http://localhost:8080` （今回、常駐サーバーの起動状態は未確認。自動テストは別の一時ポートで実行） |
 | **コードフリーズ・提出締切** | **2026年11月10日 19:00 JST（厳守）** |
@@ -235,5 +235,13 @@ MDとHTMLは共通の説明内容を持つが、完全に同文ではない。�
 - ユーザーからリポジトリへのpushとREADME修正を明示的に依頼された。
 - READMEに最終PDF・MD・HTML・設計書・API契約・HANDOVERへのリンクを追加。提出資料と同じ目的と対象ユーザーを追記し、構成図・2端末での確認方法・任意設定を整備した。
 - 送信対象は既存の表記整合、最終PDF、説明MD/HTML、図、画面のGeminiラベル、チーム情報、環境変数の空欄例と本資料。バックエンド機能の変更・実資格情報の追加はない。
-- fetch時点でリモートの追加コミットなし。mainから通常のcommit・pushで反映する（強制pushは使わない）。本番デプロイは実施しない。
+- fetch時点でリモートの追加コミットなし。通常のcommit・pushでmainへ反映済み。強制push・本番デプロイ操作は行っていない。
 - 前回のnpm test 17項目合格と最終PDF全7ページの目視検証を参照。今回追加のREADMEについては相対リンクを検証し、コミット対象のパス・差分・git diff --checkを確認する。
+
+### 反映結果
+
+- 本体コミット：`e1b4912697974b25429d365e8ca8cfe5eaccd0e6`（`docs: finalize Tonari Door submission and align README`）。20ファイルを含み、最終PDFと静止図も追跡対象に追加した。
+- `git push origin main` は成功し、リモートmainが `f699081` から `e1b4912` へ進んだことを確認。push後の作業ツリーはクリーンだった。
+- `.gitattributes` でPDFをバイナリ指定。GitがPDF内部をテキストの空白違反として扱う問題を解消し、PDFのバイト列は変更していない。
+- README相対リンク、指定した目的・対象ユーザーの文言、PDFコピー一致、ステージ済み差分の `git diff --check` は合格。
+- この結果追記も別の文書コミットとして同じmainへ送信し、リモートHEADとの一致を最終確認する。アプリの追加改修・デプロイ操作はない。
