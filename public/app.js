@@ -15,7 +15,14 @@
   // 定数・初期データ
   // ------------------------------------------------------------------
   const DEFAULT_ACCOUNT = 'yoikoarmor';
-  const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+  let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+  async function loadRtcConfig() {
+    try {
+      const config = await api('/api/rtc-config');
+      if (Array.isArray(config.iceServers) && config.iceServers.length) iceServers = config.iceServers;
+    } catch { /* Direct connections remain available when configuration cannot be loaded. */ }
+  }
   const VIDEO_CONSTRAINTS = { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' };
   const LS = {
     account: 'tonari.account',
@@ -1027,7 +1034,7 @@
       if (name && name !== peer.name) { peer.name = name; peer.nameTag.textContent = `-${name}-`; }
       return peer;
     }
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers });
     const video = h('video', { autoplay: true, playsinline: true });
     const remoteStream = new MediaStream();
     const nameTag = h('figcaption', { class: 'name-tag' }, `-${name || '家族'}-`);
@@ -1364,6 +1371,7 @@
     state.mediaStarting = true;
     clearTimeout(accountTimer);
     audioCtx();
+    await loadRtcConfig();
 
     const transition = playDoorTransition(`おじゃまします`);
     let mode;
@@ -1602,7 +1610,7 @@
     el.topicHint.textContent = t.hint ? `💡 ${t.hint}` : '';
     let label;
     if (source === 'shared') label = `🤝 -${by || '家族'}-が引いたカード`;
-    else if (isGemini) label = '✨ Gemini 2.5 Flash 生成';
+    else if (isGemini) label = '✨ Gemini 生成';
     else if (source === 'gemini-fallback') label = `🎴 100選 No.${t.id ?? '-'}（Gemini休憩中）`;
     else label = `🎴 団らん100選 No.${t.id ?? '-'}`;
     el.topicSource.textContent = label;
@@ -1746,7 +1754,7 @@
   function renderSummaryModal(s) {
     openModal(`📓 ${s.title}`, [
       h('p', {}, h('span', { class: `source-tag ${s.source === 'gemini' ? '' : 'is-fallback'}` },
-        s.source === 'gemini' ? '✨ Gemini 2.5 Flash がまとめました' : '🏮 かんたん記録（Gemini未接続）'),
+        s.source === 'gemini' ? '✨ Gemini がまとめました' : '🏮 かんたん記録（Gemini未接続）'),
         '　', h('time', {}, formatDate(s.createdAt))),
       vitalityNode(s.vitalityScore),
       h('p', { class: 'summary-mood' }, `🌤 様子：${s.mood}`),
