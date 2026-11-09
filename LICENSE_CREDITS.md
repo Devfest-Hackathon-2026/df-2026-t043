@@ -26,3 +26,9 @@ GDGoC Japan Hackathon 2026 提出用の使用ライブラリ・素材一覧で�
 | 名称 | 使用バージョン | ライセンス | 用途 | 出典 URL |
 |---|---|---|---|---|
 | Pillow | 11.3.0 | MIT-CMU | パイプライン GIF の描画・書き出し | https://pillow.readthedocs.io/en/stable/about.html |
+
+## 4. 外部 API・地図画像
+
+| 名称 | 提供元 / 条件 | 用途 | 備考 |
+|---|---|---|---|
+| Google Maps JavaScript API / Street View | Google Maps Platform 利用規約・最新の料金条件に従う | 通話ルーム内 co-walk の Street View パノラマ表示 | ブラウザ公開キーを使用。Maps JavaScript API のみに制限し、localhost と実 Cloud Run ホストの HTTP リファラー制限を設定する。パノラマ表示は Dynamic Street View SKU の対象。料金・無料利用上限は[使用量と課金](https://developers.google.com/maps/documentation/javascript/usage-and-billing)および[料金一覧](https://developers.google.com/maps/billing-and-pricing/pricing)で都度確認する。実キーでの表示確認は別途実機検証が必要。 |

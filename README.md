@@ -40,6 +40,7 @@
   - 団らん話題カードの動的生成 (`POST /api/topics/generate`)
   - 通話後の安心見守りサマリー生成 (`POST /api/summary`)
 - **リアルタイム通信**：WebSocket (`/ws`) によるドアの気配同期・ノック通知・話題カード共有・WebRTC シグナリング
+- **Street View co-walk（MVP）**：通話ルーム内でガイドがプリセットの散歩を開始し、位置・パノラマ・向き・俯角・ズームを共有します。参加者は追従表示のみで、どの参加者も散歩を終了できます。ガイド切断時も停止し、通話映像は維持したまま通話ルームへ戻ります。自由検索とガイド引継ぎはMVPに含みません。
 
 ---
 
@@ -56,11 +57,22 @@ npm ci
 # 2. 環境変数の設定（省略時も100件の話題カード＆デモフォールバックで完全動作します）
 cp .env.example .env
 # .env 内の GEMINI_API_KEY に Google AI Studio の API キーを設定
+# Street View co-walk を使う場合は GOOGLE_MAPS_BROWSER_API_KEY も設定
 
 # 3. サーバー起動
 npm start
 ```
 起動後、ブラウザで `http://localhost:8080` を開くとすぐに利用できます。
+
+### Street View co-walk の準備
+
+1. Google Cloud Console で課金を有効にし、対象プロジェクトの **Maps JavaScript API** を有効化します。
+2. Maps JavaScript API 専用のブラウザキーを作り、API制限を **Maps JavaScript API** のみにします。HTTP リファラー制限には `http://localhost:8080/*` と、実際に発行された Cloud Run ホストの `https://<実ホスト>/*` を登録します。
+3. キーを `.env` の `GOOGLE_MAPS_BROWSER_API_KEY` に設定します。このキーはブラウザから見えるため、制限を必ず設定してください。`GEMINI_API_KEY` はサーバー専用で、ここには使いません。
+
+キーが未設定、API読み込みに失敗、または Street View の画像が利用できない場合は、散歩機能を利用できない旨を表示し、既存のビデオ通話は続けます。実際の Maps API 認証と画像表示には利用者自身の有効な Maps キーが必要です。このリポジトリの変更だけでは実キーでの動作確認を示しません。
+
+Street View のパノラマ表示は Google Maps Platform の **Dynamic Street View SKU** の課金対象です。無料利用上限と料金は変わるため、利用前に[Maps JavaScript API の使用量と課金](https://developers.google.com/maps/documentation/javascript/usage-and-billing)および[Google Maps Platform の料金一覧](https://developers.google.com/maps/billing-and-pricing/pricing)で最新条件を確認してください。ここでは金額や上限値を固定していません。
 
 ### 自動スモークテストの実行
 ```bash
@@ -90,6 +102,22 @@ gcloud run deploy tonari-door-danran \
 現実装はインメモリ状態のため、デモは最大1インスタンス・単一リビジョンで運用します。再起動時はドア状態・サーバー記録が失われます。セッションアフィニティだけでは端末間の状態共有を保証しません。
 
 ※ `GEMINI_API_KEY` は Google Cloud Secret Manager または Cloud Run 環境変数として安全に注入します。
+
+Street View 用 `GOOGLE_MAPS_BROWSER_API_KEY` はブラウザへ配信される公開キーです。Cloud Run の環境変数で設定する場合も、Maps JavaScript API のみ・localhost と実 Cloud Run ホストの HTTP リファラーのみを許可する制限を設定してください。キー未設定でも通話機能を利用できます。
+
+### Street View co-walk の実機確認
+
+Cloud Run または localhost の実ブラウザ2台で、キーを設定したうえで以下を確認してください。Maps API とパノラマのライブ認証・画像表示はまだ確認済みとは扱いません。
+
+- [ ] 片方が通話ルームからプリセットを選び散歩を開始できる
+- [ ] ガイドの移動・パノラマ変更・heading / pitch / zoom がもう片方へ同期する
+- [ ] フォロワーは移動操作できず、追従表示になる
+- [ ] どちらの参加者からでも散歩を終了でき、通話映像を保ったまま通話ルームへ戻る
+- [ ] ガイド端末が切断すると散歩が停止する
+- [ ] キー未設定・無効キー・API読込失敗時もエラーでアプリや通話が停止しない
+- [ ] Cloud Run は現行のインメモリ同期設計に合わせて単一インスタンスで運用する
+
+MVPでは自由な場所検索とガイドの引継ぎを提供しません。
 
 ---
 
