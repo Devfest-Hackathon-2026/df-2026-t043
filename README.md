@@ -9,7 +9,8 @@
 - **参加会場**：Tokyo Regional
 - **対象カテゴリ**：1. 医療・福祉（高齢者見守り・遠距離家族ケア・孤立防止）
 - **デプロイURL（Google Cloud Run）**：https://gdg-hackathon-752978143113.asia-northeast1.run.app/
-- **GitHub リポジトリ**：https://github.com/yoikoarmor/GDG-hackathon
+- **開発用リポジトリ**：https://github.com/yoikoarmor/GDG-hackathon
+- **提出用リポジトリ**：https://github.com/Devfest-Hackathon-2026/df-2026-t043
 
 ### 提出ドキュメント
 
@@ -142,3 +143,7 @@ gcloud run deploy gdg-hackathon \
 - 散歩は有効化フラグなし。`GET /api/walk-config` は `{ apiKey, places }` を返し、景色表示にはMapsキーが必要。
 - 見守りノートはサーバーのメモリに最大100件を保持し、再起動で失われる。家族認証・Firestore永続化は未実装。
 - 実カメラでは顔を確認できる。バーチャル茶の間カメラも参加できるが、本人の顔は映さない。
+
+## 提出先リポジトリについて
+
+運営の初期READMEは [提出リポジトリ案内](docs/SUBMISSION_REPOSITORY_GUIDE.md) に保持しています。この提出先は公開リポジトリで、GitHub ActionsとGitHub Pagesは利用できません。アプリの公開先は上記のCloud Run URLです。
