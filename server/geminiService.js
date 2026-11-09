@@ -5,8 +5,6 @@ const { randomUUID, randomInt } = require('node:crypto');
 const curatedTopics = require('../public/data/topics.json');
 
 const MODEL = (process.env.GEMINI_MODEL || '').trim() || 'gemini-2.5-flash';
-const VERTEX_PROJECT = (process.env.GEMINI_VERTEX_PROJECT || '').trim();
-const VERTEX_LOCATION = (process.env.GEMINI_VERTEX_LOCATION || '').trim() || 'asia-northeast1';
 const TIMING_LABELS = {
   good: '◎ 声をかけるのにぴったり',
   maybe: '○ 少しなら話せそう',
@@ -17,7 +15,6 @@ const objectSchema = (properties) => ({ type: Type.OBJECT, properties, required:
 let inFlight = 0;
 
 function isGeminiConfigured() {
-  if (VERTEX_PROJECT) return true;
   const key = (process.env.GEMINI_API_KEY || '').trim();
   return Boolean(key && key !== 'your_gemini_api_key_here');
 }
@@ -40,9 +37,7 @@ async function generateJson(instruction, data, schema, imageBase64) {
   const controller = new AbortController();
   let timeout;
   try {
-    const ai = new GoogleGenAI(VERTEX_PROJECT
-      ? { vertexai: true, project: VERTEX_PROJECT, location: VERTEX_LOCATION }
-      : { vertexai: false, apiKey: process.env.GEMINI_API_KEY.trim() });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY.trim() });
     const parts = [{ text: JSON.stringify(data) }];
     if (imageBase64) {
       const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(imageBase64);

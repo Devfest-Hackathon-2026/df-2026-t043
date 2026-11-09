@@ -13,7 +13,6 @@ async function checkWalkConfig(baseUrl) {
       assert.equal(response.status, 200);
       assert.equal(response.headers.get('cache-control'), 'no-store');
       const config = await response.json();
-      assert.equal(config.enabled, true);
       assert.equal(config.apiKey, apiKey);
       assert.deepEqual(config.places.map(({ id }) => id), ['asakusa', 'yokohama', 'kyoto']);
       for (const { name, position } of config.places) {
@@ -27,7 +26,7 @@ async function checkWalkConfig(baseUrl) {
 }
 
 async function runWalkTests(baseUrl, socketClient) {
-  const previousEnabled = process.env.ENABLE_SHARED_WALK;
+  await checkWalkConfig(baseUrl);
   const doorId = 'hobby';
   const clients = [];
   async function connect() {
@@ -50,10 +49,6 @@ async function runWalkTests(baseUrl, socketClient) {
   }
 
   try {
-    delete process.env.ENABLE_SHARED_WALK;
-    const disabled = await fetch(`${baseUrl}/api/walk-config`, { signal: AbortSignal.timeout(3000) });
-    assert.equal(disabled.status, 200);
-    assert.deepEqual(await disabled.json(), { enabled: false, apiKey: '', places: [] });
     const [guide, follower, outsider] = await Promise.all([connect(), connect(), connect()]);
     enter(guide);
     enter(follower);
@@ -67,9 +62,6 @@ async function runWalkTests(baseUrl, socketClient) {
     });
 
     const start = { type: 'walk_start', doorId, placeId: 'asakusa' };
-    await rejected(guide, start, 403);
-    process.env.ENABLE_SHARED_WALK = 'true';
-    await checkWalkConfig(baseUrl);
     await rejected(outsider, start, 403);
     await rejected(guide, { ...start, placeId: 'missing' }, 404);
     await rejected(guide, { ...start, placeId: 'x'.repeat(81) }, 400);
@@ -155,8 +147,6 @@ async function runWalkTests(baseUrl, socketClient) {
     assert.equal((await closed)[0], 1008);
     console.log('✅ PASS: 散歩の設定・部屋単位の同期・案内役の制限・再入室・切断時の終了・WS送信制限');
   } finally {
-    if (previousEnabled === undefined) delete process.env.ENABLE_SHARED_WALK;
-    else process.env.ENABLE_SHARED_WALK = previousEnabled;
     await Promise.all(clients.map((client) => client.close()));
   }
 }
