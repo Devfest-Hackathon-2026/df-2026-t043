@@ -1,6 +1,6 @@
 # 『となりドア (Tonari Door)』— プロジェクト引継ぎ資料 (HANDOVER.md)
 
-**最終更新日時**：2026年11月9日 19:29 JST  
+**最終更新日時**：2026年11月9日 19:39 JST  
 **対象**：チームメンバー（`yoikoarmor`, `kaigunn_2020` / GitHub: `suzukimain`）および後続のすべてのAIエージェント
 
 ---
@@ -13,21 +13,21 @@
 | **チーム名** | Generator-Critic (`yoikoarmor`, `kaigunn_2020` / `suzukimain`) |
 | **アプリ名 / カテゴリ** | **「となりドア (Tonari Door)」** / **1. 医療・福祉** |
 | **GitHub リポジトリ** | https://github.com/yoikoarmor/GDG-hackathon （Private / `suzukimain` に Write 権限付与済） |
-| **ローカル稼働URL** | `http://localhost:8080` （バックグラウンド起動済・ブラウザ自動オープン済） |
+| **ローカル稼働URL** | `http://localhost:8080` （バックグラウンド起動中） |
 | **コードフリーズ・提出締切** | **2026年11月10日 19:00 JST（厳守）** |
 | **Regional Day（URL維持期限）** | **2026年11月14日 終了まで**（デプロイURLを稼働維持すること） |
 
 ---
 
-## 2. 最新プロダクト仕様（4つの独立したドア＝ビデオ通話ルームインスタンス方式）
+## 2. 最新プロダクト仕様（2026-11-09 19:39 確定・反映済）
 
-- **「誰が常時どこにいるか」の事前在室設定を完全廃止**：
-  - 初期状態で特定の人物（おばあちゃん等）が常時ドアの中にいる設定や、ロビーでの「ここでくつろぐ」「カメラで事前気配更新（`POST /api/doors/:id/presence`）」を廃止。
-- **「4つのドア ＝ 4つの独立したビデオ通話ルームインスタンス」**：
-  - ロビーにはシンプルに **4つのドア（① `chanoma`: 🍵 ドア1：茶の間、② `engawa`: 🌼 ドア2：日当たりの縁側、③ `kitchen`: 🍲 ドア3：ダイニング、④ `hobby`: 🧶 ドア4：趣味の部屋）** が並ぶ。
-  - 各ドアはそれぞれ1つの独立したルームインスタンスとして動作し、誰も入っていないときは「`空室 — ノックして団らんを始める`（0人・消灯）」。
-  - 誰かがドアをノックして入室（WebSocket `enter_door`）しているときだけそのドアに明かりが灯り、1人のときは **`-{アカウント名}-がくつろいでいます。`**、2人以上のときは **`-{先頭アカウント名}-ほか計N人が団らん中`** とリアルタイム表示される。
-  - 同じドアに入った人同士で **WebRTC ビデオ通話（カメラ常時ON：実カメラ ⇄ バーチャル茶の間カメラ）** と **団らん話題カード（100選ランダム ＋ Gemini 2.5 Flash 生成）** が共有され、退室時には **Gemini 2.5 Flash による安心見守りレポート** が生成される。
+1. **「4つのドア ＝ 4つの独立したビデオ通話ルームインスタンス」**：
+   - ロビーにはシンプルに **4つのドア（① `chanoma`: 🍵 ドア1：茶の間、② `engawa`: 🌼 ドア2：日当たりの縁側、③ `kitchen`: 🍲 ドア3：ダイニング、④ `hobby`: 🧶 ドア4：趣味の部屋）** が並ぶ。
+   - 初期状態ではすべて「空室（0人・消灯）」であり、特定の人物が常時中にいる設定はない。
+   - 誰かがドアをノックして入室しているときだけ明かりが灯り、1人のときは **`-{アカウント名}-がくつろいでいます。`**、2人以上のときは **`-{先頭アカウント名}-ほか計N人が団らん中`** と表示される。
+2. **メイン映像エリアは「実際に入ってきた相手」専用（「おばあちゃん（デモ）」シミュレーター完全廃止）**：
+   - 団らんルーム内の大きなメイン映像枠（`#remoteStage`）から、1人入室時に出ていた「`-おばあちゃん-（デモ）` / `家族シミュレーター（デモ）`」を完全削除。
+   - 自分1人だけが入室している間は「🏮 家族の入室を待っています — 同じドアに家族が入ると、ここに相手の映像が映ります。」という温かい待機カードを表示し、**別のブラウザ・タブ・スマホから相手が同じドアに入室した瞬間に待機カードが消え、その相手のWebRTCビデオ映像が大きく表示される**。
 
 ---
 
@@ -35,10 +35,9 @@
 
 | 担当エージェント | 役割 | ステータス |
 |---|---|---|
-| **Antigravity** | 統括・仕様更新・結合検証・ローカルサーバー起動・引継ぎ管理 | **✅ 完了**：`API_CONTRACT.md` 更新、文字化け修正、`npm test` 全項目PASS確認、`http://localhost:8080` 起動＆ブラウザ表示 |
-| **Codex CLI (`gpt-6.1-sol` / `high`)** | バックエンド＆ドキュメント改修 | **✅ 完了**：`server/index.js`, `server/geminiService.js`, `ARCHITECTURE.md`, `README.md`, `docs/PRODUCT_DOCUMENT.md`, `docs/PRODUCT_DOCUMENT.html` を4ドア・ルームインスタンス仕様へ更新 |
-| **Claude Code CLI (`opus-5.5-mid`)** | フロントエンド・ドアUI改修 | **✅ 完了**：`public/index.html`, `public/styles.css`, `public/app.js` から事前在室設定を削除し、4ドア＝4ルームUIへ刷新（3ブラウザE2E検証済） |
-| **Astra-mid (`gpt-6-astra` / `medium`)** | バグ監査・自動テスト改修 | **✅ 完了**：`server/smokeTest.js`, `server/frontendTest.js` を新仕様（初期4ドア空室・入退室・WebRTCシグナル・話題共有・カメラ競合防止）向けに更新し全テストPASS |
+| **Antigravity** | 統括・仕様更新・ローカルサーバー稼働・引継ぎ管理 | **✅ 完了**：`http://localhost:8080` 稼働中。全AIの作業統括・引継ぎ資料最新化完了 |
+| **Sol-fast (`gpt-6.1-sol` / `low`)** | 団らんルーム「おばあちゃん（デモ）」削除＆相手映像枠への改修 (`task-342`) | **✅ 完了**：[public/index.html](file:///c:/Users/yoiko/Downloads/GDG-hackathon/public/index.html), [public/app.js](file:///c:/Users/yoiko/Downloads/GDG-hackathon/public/app.js), [public/styles.css](file:///c:/Users/yoiko/Downloads/GDG-hackathon/public/styles.css) から家族シミュレーター（おばあちゃん）と自動応答を完全削除し、相手ピア映像枠へ改修完了 |
+| **Astra-fast (`gpt-6-astra` / `low`)** | 改修後の高速バグチェック＆テスト検証 (`task-354`) | **✅ 完了**：`closeAllPeers()` 時に待機カードが復帰しないエッジケースを検出し修正。[server/frontendTest.js](file:///c:/Users/yoiko/Downloads/GDG-hackathon/server/frontendTest.js) にピア入退室時の待機枠表示切替テストを追加し、`npm test` 全件PASS確認 |
 
 ---
 
@@ -53,25 +52,3 @@
   - [index.html](file:///c:/Users/yoiko/Downloads/GDG-hackathon/public/index.html) / [styles.css](file:///c:/Users/yoiko/Downloads/GDG-hackathon/public/styles.css) / [app.js](file:///c:/Users/yoiko/Downloads/GDG-hackathon/public/app.js) / [topics.json](file:///c:/Users/yoiko/Downloads/GDG-hackathon/public/data/topics.json) / [pipeline.gif](file:///c:/Users/yoiko/Downloads/GDG-hackathon/public/assets/pipeline.gif)
 - **バックエンド＆自動テスト (`server/`)**
   - [index.js](file:///c:/Users/yoiko/Downloads/GDG-hackathon/server/index.js) / [geminiService.js](file:///c:/Users/yoiko/Downloads/GDG-hackathon/server/geminiService.js) / [smokeTest.js](file:///c:/Users/yoiko/Downloads/GDG-hackathon/server/smokeTest.js) / [frontendTest.js](file:///c:/Users/yoiko/Downloads/GDG-hackathon/server/frontendTest.js)
-
----
-
-## 5. 動作確認・コマンド早見表
-
-```powershell
-# 自動監査＆ユニット・結合テスト実行（すべてPASS確認済）
-npm test
-
-# ローカルサーバー起動（現在ポート8080で起動中）
-npm start
-```
-
----
-
-## 6. 提出期限（11月10日 19:00 JST）までの残タスク
-
-- [x] **1. 新方針（4つの独立ドアインスタンス方式）へのバックエンド＆フロントエンド改修完了**
-- [x] **2. Astra-mid による新方針コードのバグチェック＆自動テスト更新（`npm test` 全PASS）**
-- [x] **3. `README.md` / `docs/PRODUCT_DOCUMENT.md` / `docs/PRODUCT_DOCUMENT.html` の新方針への同期**
-- [ ] **4. Cloud Run へのデプロイと本番URLの発行**（`gcloud run deploy tonari-door --source . --region asia-northeast1 --allow-unauthenticated --max-instances 1 --session-affinity`）
-- [ ] **5. デモ動画撮影（3分以内）・ピッチ用スライド作成・Google Drive 提出**

@@ -97,10 +97,14 @@
         <p class="room-waiting" id="roomWaiting" role="status" aria-live="polite" hidden></p>
 
         <div class="stage" id="remoteStage" aria-label="家族の映像">
-          <!-- 家族シミュレーター（1人デモ用） -->
-          <figure class="video-tile tile-family" id="simulatorTile">
-            <canvas id="simulatorCanvas" width="960" height="600" aria-label="家族シミュレーター映像"></canvas>
-            <figcaption class="name-tag" id="simulatorName">-おばあちゃん-</figcaption>
+          <!-- 実際の家族が入室するまでの待機カード -->
+          <figure class="video-tile tile-empty" id="simulatorTile">
+            <div class="waiting-content">
+              <span class="waiting-lantern" aria-hidden="true">🏮</span>
+              <h2>家族の入室を待っています</h2>
+              <p>お茶でも飲みながら、ひと休み。<br />同じドアに家族が入ると、ここに相手の映像が映ります。</p>
+              <span class="waiting-badge">明かりを灯して、お待ちしています</span>
+            </div>
             <div class="reaction-layer"></div>
           </figure>
         </div>

@@ -79,12 +79,23 @@ async function runFrontendTests() {
   assert.equal(t.state.room, null);
 
   t.state.room = { participants: new Set(['me']) };
+  t.el.simulatorTile.hidden = false;
   await t.onSignal({ fromId: 'server-1', accountName: 'trusted', payload: { from: 'peer', name: 'spoof', kind: 'candidate', candidate: { candidate: 'ice' } } });
+  assert.equal(t.el.simulatorTile.hidden, true, 'A new WebRTC peer hides the waiting placeholder');
   const oldPeer = t.state.peers.get('peer');
   assert.equal(oldPeer.pendingIce.length, 1);
   assert.equal(oldPeer.name, 'trusted');
   await t.onSignal({ fromId: 'server-2', accountName: 'trusted', payload: { from: 'peer', kind: 'candidate', candidate: { candidate: 'new-ice' } } });
   assert.notEqual(t.state.peers.get('peer'), oldPeer);
+  t.resetRoom();
+  assert.equal(t.state.peers.size, 0);
+  assert.equal(t.el.simulatorTile.hidden, false, 'Resetting the room restores the waiting placeholder');
+  t.state.room = { participants: new Set(['me']) };
+  await t.onSignal({ fromId: 'server-2', accountName: 'trusted', payload: { from: 'peer', kind: 'candidate', candidate: { candidate: 'ice' } } });
+  assert.equal(t.el.simulatorTile.hidden, true);
+  await t.onSignal({ fromId: 'server-2', accountName: 'trusted', payload: { from: 'peer', kind: 'bye' } });
+  assert.equal(t.state.peers.size, 0);
+  assert.equal(t.el.simulatorTile.hidden, false, 'The last peer leaving restores the waiting placeholder');
   t.handleMessage({ type: 'error', requestType: 'enter_door' });
   assert.equal(t.state.room, null);
 

@@ -32,7 +32,6 @@
   ];
 
   const THEME_BY_ID = { chanoma: 'indigo', engawa: 'matcha', kitchen: 'sunset', hobby: 'sakura' };
-  const SIM_NAME = 'おばあちゃん'; // 1人デモ時のシミュレーター役（実在の在室者ではない）
 
   // file:// で開いた時などに topics.json が読めない場合の最小デッキ
   const EMERGENCY_TOPICS = [
@@ -42,19 +41,6 @@
     { id: 16, category: '季節・天気', topic: 'お庭やベランダの植物、今どんな様子？よかったらカメラで見せて！', hint: 'ビデオ通話ならではの『見せて』が自然に生まれます' },
   ];
 
-  const SIM_REPLIES = {
-    '食事': ['今日はね、お味噌汁にお豆腐とわかめを入れたのよ。', 'あら、お腹がすいてきちゃったわ。'],
-    '季節': ['こっちはね、朝晩が冷えるようになったわよ。', 'お庭の木がすっかり色づいたの。'],
-    '昔話': ['あの頃はねぇ、本当に楽しかったわ。', 'ふふ、懐かしいわねぇ。よく覚えてるわよ。'],
-    '暮らし': ['おかげさまで元気にしてるわよ。', '最近は朝のお散歩を続けてるの。'],
-    '趣味': ['最近はね、朝ドラが楽しみなのよ。', '編み物がもうすぐ完成しそうなの。'],
-    '家族': ['みんな元気にしてる？顔が見られて嬉しいわ。', 'この前ね、写真を整理してたのよ。'],
-    'お出かけ': ['来月ね、ご近所さんと温泉に行くのよ。', '今度帰ってきたら、あそこに行きましょうか。'],
-    'ご近所': ['お隣さんがね、柿をたくさんくれたのよ。', '商店街に新しいお店ができたの。'],
-    '知恵袋': ['それはね、焦らないのが一番よ。', 'おばあちゃんの知恵、教えてあげようか。'],
-    '遊び': ['よーし、負けないわよ！', 'ふふふ、じゃあ私からいくわね。'],
-    'default': ['あら、いい話ねぇ。そうねぇ…', 'まあ！そんなこと聞いてくれるの？嬉しいわ。', 'それはね、ちょっと長くなるわよ〜。'],
-  };
 
   // ------------------------------------------------------------------
   // 状態
@@ -82,7 +68,6 @@
     cameraMode: 'real',
     micOn: true,
     selfCam: null,        // HomeCam (バーチャル茶の間カメラ)
-    simCam: null,         // HomeCam (家族シミュレーター)
     peers: new Map(),     // peerId -> { pc, name, serverId, tile, video, offered, pendingIce }
     audioCtx: null,
     entering: false,
@@ -117,8 +102,6 @@
     participantsBar: $('#participantsBar'),
     remoteStage: $('#remoteStage'),
     simulatorTile: $('#simulatorTile'),
-    simulatorCanvas: $('#simulatorCanvas'),
-    simulatorName: $('#simulatorName'),
     selfTile: $('#selfTile'),
     selfVideo: $('#selfVideo'),
     selfName: $('#selfName'),
@@ -336,7 +319,6 @@
   // ------------------------------------------------------------------
   // HomeCam — Canvas で描く温かい茶の間のライブ映像
   //   kind: 'self'   … 自分用バーチャル茶の間カメラ（実カメラが無い時）
-  //         'family' … 家族シミュレーター（1人でデモする時の相手役）
   // ------------------------------------------------------------------
   class HomeCam {
     constructor(canvas, { name = '', elder = false, kind = 'self', cardigan = '#c8553d' } = {}) {
@@ -361,9 +343,6 @@
       if (this.timer) return;
       this.timer = setInterval(() => this.draw(), 1000 / 24);
       this.draw();
-      if (this.kind === 'family') {
-        this.idleTimer = setInterval(() => this.idle(), 9000);
-      }
     }
     stop() {
       clearInterval(this.timer);
@@ -600,7 +579,7 @@
       // ラベル
       ctx.textAlign = 'left';
       ctx.font = 'bold 22px "Zen Maru Gothic", sans-serif';
-      const label = this.kind === 'family' ? '● LIVE  家族シミュレーター（デモ）' : '● LIVE  🍵 バーチャル茶の間カメラ';
+      const label = '● LIVE  🍵 あなたのバーチャル茶の間カメラ';
       const lw = ctx.measureText(label).width + 28;
       ctx.fillStyle = 'rgba(47, 74, 109, 0.85)';
       this.roundRect(18, 18, lw, 38, 19); ctx.fill();
@@ -1107,14 +1086,12 @@
       try { peer.pc.close(); } catch { /* noop */ }
       peer.tile.remove();
     }
+    updateSimulatorVisibility();
   }
 
   function updateSimulatorVisibility() {
     const hasPeers = state.peers.size > 0;
     el.simulatorTile.hidden = hasPeers;
-    if (state.simCam) {
-      if (hasPeers) state.simCam.stop(); else if (state.room) state.simCam.start();
-    }
     updateWaiting();
   }
 
@@ -1388,17 +1365,7 @@
     state.mediaStarting = false;
     const roomSession = state.room;
 
-    // 部屋に自分1人の間だけ表示する「家族シミュレーター（デモ）」。実在の在室者ではない。
-    el.simulatorName.textContent = `-${SIM_NAME}-（デモ）`;
-    if (!state.simCam) state.simCam = new HomeCam(el.simulatorCanvas, { kind: 'family', elder: true, cardigan: '#a35866' });
-    state.simCam.name = SIM_NAME;
     updateSimulatorVisibility();
-    state.simCam.start();
-    setTimeout(() => {
-      if (state.room !== roomSession) return;
-      state.simCam.wave();
-      state.simCam.say('あら、いらっしゃい！顔が見られて嬉しいわ。');
-    }, 600);
 
     renderParticipants();
     state.room.timer = setInterval(() => {
@@ -1434,8 +1401,8 @@
     el.roomWaiting.hidden = !alone;
     if (alone) {
       el.roomWaiting.textContent = state.wsReady
-        ? `🕯 いまはあなた1人です。ドアに「${relaxingText(state.account)}」と明かりが灯っています。家族がノックして入ってくるのを待ちましょう（それまではデモ用の家族シミュレーターがお相手します）。`
-        : '🕯 ひとりデモモードです。サーバーに接続すると、同じドアに入った家族とビデオでつながります（いまはデモ用の家族シミュレーターがお相手します）。';
+        ? `🕯 いまはあなた1人です。ドアに「${relaxingText(state.account)}」と明かりが灯っています。家族がノックして入ってくるのを待ちましょう。`
+        : '🕯 サーバーへの接続を待っています。接続後、同じドアに入った家族とビデオでつながります。';
     }
   }
 
@@ -1453,20 +1420,6 @@
     floatEmoji(el.selfTile, emoji);
     state.selfCam?.react(emoji);
     sendSignal({ kind: 'reaction', emoji });
-    if (state.peers.size === 0 && state.simCam) {
-      const sim = state.simCam;
-      setTimeout(() => {
-        switch (emoji) {
-          case '👋': sim.wave(); sim.say('はーい、ちゃんと見えてるわよ〜'); break;
-          case '😊': sim.laugh(); sim.react('😊'); break;
-          case '😂': sim.laugh(); sim.react('😂'); sim.say('あはは、おかしいわねぇ！'); break;
-          case '👍': sim.nod(); sim.say('うんうん、そうよね！'); break;
-          case '❤️': sim.react('❤️'); sim.say('ありがとうね。嬉しいわ。'); break;
-          case '🍵': sim.sip(); sim.say('いただきます。あったかいわねぇ。'); break;
-          default: sim.react(emoji);
-        }
-      }, 700);
-    }
   }
 
   // ------------------------------------------------------------------
@@ -1552,7 +1505,7 @@
         timeout: 20000,
         body: {
           accountName: state.account,
-          partnerAccount: others[0] || (state.peers.size === 0 ? SIM_NAME : '家族'),
+          partnerAccount: others[0] || '家族',
           doorName: state.room.door.name,
           context: roomContext(),
         },
@@ -1624,16 +1577,6 @@
     el.topicHistory.prepend(li);
     el.historyCount.textContent = String(state.room.topicsUsed.length);
 
-    // 家族シミュレーターのお返事
-    if (state.peers.size === 0 && state.simCam && source !== 'shared') {
-      const key = Object.keys(SIM_REPLIES).find((k) => t.category.includes(k)) || 'default';
-      const session = state.room;
-      setTimeout(() => {
-        if (state.room !== session || !state.simCam) return;
-        state.simCam.nod();
-        state.simCam.say(pick(SIM_REPLIES[key]));
-      }, 1600);
-    }
   }
 
   // ------------------------------------------------------------------
@@ -1644,7 +1587,6 @@
     state.room = null;
     closeAllPeers();
     stopLocalMedia();
-    state.simCam?.stop();
     el.room.hidden = true;
     el.lobby.hidden = false;
     el.lobbyControls.hidden = false;
@@ -1665,7 +1607,6 @@
     clearInterval(room.timer);
     closeAllPeers();
     stopLocalMedia();
-    state.simCam?.stop();
     state.room = null;
 
     await playDoorTransition('おじゃましました', true);
