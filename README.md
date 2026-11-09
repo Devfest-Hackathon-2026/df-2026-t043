@@ -105,6 +105,8 @@ gcloud run deploy tonari-door-danran \
 
 ※ `GEMINI_API_KEY` は Google Cloud Secret Manager または Cloud Run 環境変数として安全に注入します。
 
+Vertex AI 経由で Gemini を使う場合は、対象プロジェクトで Vertex AI API を有効にして、Cloud Run の `GEMINI_VERTEX_PROJECT` にそのプロジェクト ID を設定します。実行サービスアカウントに Vertex AI の予測権限が必要です。接続先は既定で東京（`asia-northeast1`）です。
+
 Street View 用 `GOOGLE_MAPS_BROWSER_API_KEY` はブラウザへ配信される公開キーです。Cloud Run の環境変数で設定する場合も、Maps JavaScript API のみ・localhost と実 Cloud Run ホストの HTTP リファラーのみを許可する制限を設定してください。キー未設定でも通話機能を利用できます。
 
 ### Street View co-walk の実機確認
