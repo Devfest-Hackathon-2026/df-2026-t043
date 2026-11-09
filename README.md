@@ -51,7 +51,7 @@
 ### 手順
 ```bash
 # 1. 依存パッケージのインストール
-npm install
+npm ci
 
 # 2. 環境変数の設定（省略時も100件の話題カード＆デモフォールバックで完全動作します）
 cp .env.example .env
@@ -81,8 +81,14 @@ gcloud run deploy tonari-door-danran \
   --region asia-northeast1 \
   --allow-unauthenticated \
   --session-affinity \
+  --timeout 3600 \
+  --concurrency 80 \
+  --min-instances 1 \
+  --max-instances 1 \
   --set-env-vars="GEMINI_MODEL=gemini-2.5-flash"
 ```
+現実装はインメモリ状態のため、デモは最大1インスタンス・単一リビジョンで運用します。再起動時はドア状態・サーバー記録が失われます。セッションアフィニティだけでは端末間の状態共有を保証しません。
+
 ※ `GEMINI_API_KEY` は Google Cloud Secret Manager または Cloud Run 環境変数として安全に注入します。
 
 ---
@@ -93,3 +99,12 @@ gcloud run deploy tonari-door-danran \
 - **Antigravity**：全体統括、要件適合監査、100件の団らん話題カード（`public/data/topics.json`）作成、統合テスト・バグ検証
 - **Codex CLI (`codex-sol6.1-high`)**：アーキテクチャ詳細設計（`ARCHITECTURE.md`）、Express + WebSocket + `@google/genai` バックエンド実装（`server/`）
 - **Claude Code CLI (`opus-5.5-mid`)**：複数のドアが並ぶ入口UI、`-{アカウント名}-がくつろいでいます。` 気配プレート、ビデオ通話強制の団らんルームUI実装（`public/`）
+
+
+## 動作範囲と検証
+
+- 共同利用には Cloud Run 発行の HTTPS URL を使います。`firebase.json` は静的なひとりデモ専用です。同一ホストの `/ws` を使う現実装を Firebase Hosting に載せても、家族間同期・通話の構成にはなりません。
+- アカウント名は認証ではありません。現状は全接続者でドアと記録を共有するデモです。家族ごとの認証・認可、Firestore等の永続化、TURN中継は未実装です。
+- 初期在室者とCanvas映像はデモです。バーチャル映像から実際の顔色や安否は判断できません。手動の在室設定は切断後も保持され、オンライン表示とは異なります。
+- 見守り要約に送るのは時間・実参加者名・話題・任意メモです。通話映像や音声の自動解析は行いません。AI失敗時またはメモがない場合、元気度は未評価です。
+- `npm test` は実APIキーを使わず、HTTP/WSの入力検証・部屋移動・切断・満員、SDKの成功/不正出力/レート制限/タイムアウト、フロントのカメラ後始末・遅延応答を検証します。実ブラウザのWebRTC接続、カメラ権限、別ネットワークのNAT越えは別途実機確認が必要です。

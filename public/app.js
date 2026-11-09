@@ -3,8 +3,8 @@
    - サーバー (server/index.js) が無くても、静的ファイルだけで「ひとりデモ」が動くよう
      すべての API 呼び出しにローカルフォールバックを用意しています。
    - WebRTC シグナリングは API_CONTRACT.md の `webrtc_signal` を使用。
-     payload 内に { kind, from, to, name } を持たせ、サーバーが同じドアの
-     参加者へ中継する前提です（targetId はサーバー採番 ID が分かる場合のみ付与）。
+     payload 内に { kind, from, to, name } を持たせ、必須の targetId で
+     同じドアの参加者へ個別に中継します。
    ===================================================================== */
 (() => {
   'use strict';
@@ -100,6 +100,11 @@
     peers: new Map(),     // peerId -> { pc, name, serverId, tile, video, offered, pendingIce }
     audioCtx: null,
     entering: false,
+    mediaStarting: false,
+    switchingCamera: false,
+    cameraSwitch: 0,
+    presenceRevision: 0,
+    pendingPresence: loadLS('tonari.pendingPresence', null),
   };
 
   // ------------------------------------------------------------------
@@ -164,7 +169,9 @@
   function loadLS(key, fallback) {
     try {
       const v = localStorage.getItem(key);
-      return v === null ? fallback : JSON.parse(v);
+      const parsed = v === null ? fallback : JSON.parse(v);
+      if (fallback !== null && (typeof parsed !== typeof fallback || parsed === null || Array.isArray(parsed) !== Array.isArray(fallback))) return fallback;
+      return parsed;
     } catch { return fallback; }
   }
   function saveLS(key, value) {
@@ -191,7 +198,7 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-  const clampName = (s) => String(s || '').trim().slice(0, 24);
+  const clampName = (s) => String(s || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 24);
   const relaxingText = (name) => `-${name}-がくつろいでいます。`;
 
   function statusTextFor(name, mode) {
@@ -325,7 +332,10 @@
   }
 
   let modalOnClose = null;
+  let modalRevision = 0;
   function openModal(title, bodyNodes, { onClose } = {}) {
+    if (!el.modal.hidden) closeModal();
+    ++modalRevision;
     el.modalTitle.textContent = title;
     el.modalBody.replaceChildren(...[].concat(bodyNodes));
     el.modal.hidden = false;
@@ -335,6 +345,7 @@
   function closeModal() {
     if (el.modal.hidden) return;
     el.modal.hidden = true;
+    ++modalRevision;
     el.modalBody.replaceChildren();
     const cb = modalOnClose;
     modalOnClose = null;
@@ -664,7 +675,7 @@
   function normalizeDoor(raw, base = {}) {
     const d = { ...base, ...raw };
     const participants = Array.isArray(d.participants) ? d.participants.map(participantName).filter(Boolean) : [];
-    const occupant = d.occupantAccount || participants[0] || '';
+    const occupant = typeof d.occupantAccount === 'string' ? d.occupantAccount : participants[0] || '';
     const mode = d.mode || (occupant ? 'relaxing' : 'empty');
     let statusText = d.statusText;
     // 仕様厳守：くつろぎ中は必ず「-{アカウント名}-がくつろいでいます。」
@@ -821,7 +832,7 @@
     if (mode !== 'relaxing') {
       return { timingScore: 'busy', aiDetail: mode === 'away' ? 'お出かけ中のようです。戻ってきたらまた声をかけましょう。' : '手が離せないようです。少し時間をおいてみましょう。' };
     }
-    if (/寝|眠|休|うとうと|お昼寝/.test(hint)) return { timingScore: 'busy', aiDetail: 'ひと休み中のようです。そっとしておいて、あとで声をかけましょう。' };
+    if (/寝|眠|うとうと|お昼寝|風呂|入浴/.test(hint)) return { timingScore: 'busy', aiDetail: '今はそっとしておいて、あとで声をかけましょう。' };
     if (/料理|掃除|洗濯|電話|支度|忙/.test(hint)) return { timingScore: 'maybe', aiDetail: '家事の合間のようです。短めの声かけならちょうどよさそうです。' };
     return { timingScore: 'good', aiDetail: 'ゆったり過ごしているようです。今なら気軽に声をかけられます。' };
   }
@@ -830,6 +841,9 @@
     const door = state.doors.find((d) => d.id === doorId);
     if (!door) return null;
     const name = state.account;
+    const revision = ++state.presenceRevision;
+    state.pendingPresence = { doorId, mode, accountName: name, activityHint };
+    saveLS('tonari.pendingPresence', state.pendingPresence);
 
     // 1) 楽観的に即反映（仕様：入力したアカウント名で即座に切替）
     const local = localAnalyze(activityHint, mode);
@@ -837,7 +851,7 @@
     state.doors = state.doors.map((d) => {
       if (d.id !== doorId && d.occupantAccount === name) {
         const rest = d.participants.filter((p) => p !== name);
-        return normalizeDoor({ ...d, occupantAccount: rest[0] || '', participants: rest, mode: rest[0] ? 'relaxing' : 'empty', statusText: '' });
+        return normalizeDoor({ ...d, occupantAccount: rest[0] || '', participants: rest, participantCount: undefined, mode: rest[0] ? 'relaxing' : 'empty', statusText: '' });
       }
       return d;
     });
@@ -849,7 +863,8 @@
       timingScore: local.timingScore,
       timingLabel: TIMING_LABELS[local.timingScore],
       aiDetail: activityHint ? `${activityHint}` : local.aiDetail,
-      participants: [name, ...door.participants.filter((p) => p !== name && p !== door.occupantAccount)],
+      participants: [...(mode === 'away' ? [] : [name]), ...door.participants.filter((p) => p !== name && p !== door.occupantAccount)],
+      participantCount: undefined,
       source: 'local',
     });
     state.doors = state.doors.map((d) => (d.id === doorId ? optimistic : d));
@@ -862,8 +877,12 @@
       const res = await api(`/api/doors/${encodeURIComponent(doorId)}/presence`, {
         method: 'POST',
         body: { accountName: name, mode, activityHint, imageBase64 },
-        timeout: imageBase64 ? 20000 : 12000,
+        timeout: 20000,
       });
+      if (revision !== state.presenceRevision) return null;
+      state.pendingPresence = null;
+      saveLS('tonari.pendingPresence', null);
+      saveLS(LS.localDoors, {});
       state.serverOnline = true;
       if (Array.isArray(res.doors)) {
         setDoors(res.doors);
@@ -881,9 +900,8 @@
       return state.doors.find((d) => d.id === doorId);
     } catch {
       // オフライン：ローカルに保存しておく
-      const overrides = loadLS(LS.localDoors, {});
-      overrides[doorId] = optimistic;
-      for (const d of state.doors) if (d.id !== doorId && overrides[d.id]?.occupantAccount === name) delete overrides[d.id];
+      if (revision !== state.presenceRevision) return null;
+      const overrides = Object.fromEntries(state.doors.map((d) => [d.id, d]));
       saveLS(LS.localDoors, overrides);
       return optimistic;
     }
@@ -904,6 +922,7 @@
 
   // 「📸 カメラ/状況からGeminiで声かけタイミングを更新」
   function openGeminiPresence() {
+    let closed = false;
     let stream = null;
     let fallbackCam = null;
     const preview = h('div', { class: 'cam-preview' });
@@ -930,8 +949,10 @@
     (async () => {
       try {
         stream = await getMedia({ video: VIDEO_CONSTRAINTS, audio: false });
+        if (closed) { stream.getTracks().forEach((tr) => tr.stop()); return; }
         video.srcObject = stream;
       } catch {
+        if (closed) return;
         // カメラが無い場合はバーチャル茶の間の映像で代用
         const canvas = h('canvas', { width: '960', height: '600' });
         fallbackCam = new HomeCam(canvas, { name: state.account, kind: 'self' });
@@ -973,6 +994,7 @@
       result,
     ], {
       onClose: () => {
+        closed = true;
         stream?.getTracks().forEach((tr) => tr.stop());
         fallbackCam?.stop();
       },
@@ -1018,6 +1040,7 @@
       state.serverOnline = true;
       updateConn();
       send({ type: 'join_lobby', accountName: state.account });
+      if (state.pendingPresence?.accountName === state.account) setPresence(state.pendingPresence);
       if (state.room) {
         // 再接続時：サーバー側の接続IDが変わるので古いピアは張り直す
         closeAllPeers();
@@ -1032,6 +1055,9 @@
     });
     ws.addEventListener('close', () => {
       state.wsReady = false;
+      closeAllPeers();
+      if (state.room) { state.room.participants = new Set([state.account]); renderParticipants(); }
+      updateSimulatorVisibility();
       updateConn();
       scheduleReconnect();
     });
@@ -1065,6 +1091,7 @@
       case 'error':
         console.warn('[ws] server error', msg);
         if (msg.message) toast(`⚠️ ${msg.message}`);
+        if (msg.requestType === 'enter_door' && state.room) resetRoom();
         break;
       case 'knock_notification':
         onKnockNotification(msg);
@@ -1151,22 +1178,25 @@
     if (p.to && p.to !== state.peerId) return;
     const peerId = p.from;
     const serverId = msg.fromId;
+    const existing = state.peers.get(peerId);
+    if (existing && existing.serverId !== serverId) removePeer(peerId);
 
     try {
       switch (p.kind) {
         case 'hello':
         case 'hello_ack': {
-          const peer = ensurePeer(peerId, p.name || msg.accountName, serverId);
+          const peer = ensurePeer(peerId, msg.accountName, serverId);
           if (p.kind === 'hello') sendSignal({ kind: 'hello_ack', to: peerId }, serverId);
           if (state.peerId < peerId && !peer.offered) await makeOffer(peer);
           break;
         }
         case 'offer': {
-          const peer = ensurePeer(peerId, p.name || msg.accountName, serverId);
+          const peer = ensurePeer(peerId, msg.accountName, serverId);
           await peer.pc.setRemoteDescription(p.sdp);
           await flushIce(peer);
           const answer = await peer.pc.createAnswer();
           await peer.pc.setLocalDescription(answer);
+          if (state.peers.get(peerId) !== peer) return;
           sendSignal({ kind: 'answer', to: peerId, sdp: peer.pc.localDescription }, peer.serverId);
           break;
         }
@@ -1179,10 +1209,10 @@
           break;
         }
         case 'candidate': {
-          const peer = state.peers.get(peerId);
-          if (!peer || !p.candidate) break;
+          if (!p.candidate) break;
+          const peer = ensurePeer(peerId, msg.accountName, serverId);
           if (peer.pc.remoteDescription) await peer.pc.addIceCandidate(p.candidate).catch(() => {});
-          else peer.pendingIce.push(p.candidate);
+          else if (peer.pendingIce.length < 100) peer.pendingIce.push(p.candidate);
           break;
         }
         case 'reaction': {
@@ -1254,10 +1284,13 @@
 
   async function makeOffer(peer) {
     peer.offered = true;
-    const offer = await peer.pc.createOffer();
-    await peer.pc.setLocalDescription(offer);
-    const peerId = [...state.peers.entries()].find(([, v]) => v === peer)?.[0];
-    sendSignal({ kind: 'offer', to: peerId, sdp: peer.pc.localDescription }, peer.serverId);
+    try {
+      const offer = await peer.pc.createOffer();
+      await peer.pc.setLocalDescription(offer);
+      const peerId = [...state.peers.entries()].find(([, v]) => v === peer)?.[0];
+      if (!peerId) return;
+      sendSignal({ kind: 'offer', to: peerId, sdp: peer.pc.localDescription }, peer.serverId);
+    } catch (err) { peer.offered = false; throw err; }
   }
 
   function removePeer(peerId) {
@@ -1312,6 +1345,7 @@
 
   /** getUserMedia にタイムアウトを付ける（許可ダイアログ放置でも入室が止まらないように） */
   function getMedia(constraints, ms = 12000) {
+    if (!navigator.mediaDevices?.getUserMedia) return Promise.reject(new Error('Camera unavailable'));
     return new Promise((resolve, reject) => {
       let settled = false;
       const timer = setTimeout(() => { settled = true; reject(new Error('getUserMedia timeout')); }, ms);
@@ -1356,6 +1390,7 @@
       watchRealTrack(videoTrack);
     }
     state.localStream = new MediaStream([videoTrack, state.audioTrack].filter(Boolean));
+    if (!videoTrack || videoTrack.readyState !== 'live') throw new Error('利用できる映像がありません。このブラウザでは入室できません。');
     if (state.audioTrack) state.audioTrack.enabled = state.micOn;
     attachSelfVideo();
     return state.cameraMode;
@@ -1383,40 +1418,68 @@
   }
 
   async function switchCamera(mode) {
-    if (!state.localStream || mode === state.cameraMode) return;
-    let newTrack;
-    if (mode === 'real') {
-      try {
-        const s = await getMedia({ video: VIDEO_CONSTRAINTS });
-        newTrack = s.getVideoTracks()[0];
-        state.realVideoTrack = newTrack;
-        watchRealTrack(newTrack);
-      } catch {
-        toast('📷 カメラが使えませんでした。バーチャル茶の間カメラのまま団らんを続けます。');
+    if (!state.localStream || state.switchingCamera || mode === state.cameraMode) return;
+    const stream = state.localStream;
+    const revision = ++state.cameraSwitch;
+    state.switchingCamera = true;
+    try {
+      let newTrack;
+      if (mode === 'real') {
+        try {
+          const s = await getMedia({ video: VIDEO_CONSTRAINTS });
+          newTrack = s.getVideoTracks()[0];
+          if (revision !== state.cameraSwitch || state.localStream !== stream) { s.getTracks().forEach((tr) => tr.stop()); return; }
+          if (!newTrack) throw new Error('No video track');
+          state.realVideoTrack = newTrack;
+          watchRealTrack(newTrack);
+        } catch {
+          toast('📷 カメラが使えませんでした。バーチャル茶の間カメラのまま団らんを続けます。');
+          return;
+        }
+      } else {
+        newTrack = getVirtualTrack();
+        if (!newTrack) throw new Error('Virtual camera unavailable');
+      }
+      const old = state.localStream.getVideoTracks()[0];
+      if (old) state.localStream.removeTrack(old);
+      state.localStream.addTrack(newTrack);
+      const senders = [...state.peers.values()].map((peer) => peer.pc.getSenders().find((s) => s.track?.kind === 'video')).filter(Boolean);
+      const results = await Promise.allSettled(senders.map((sender) => sender.replaceTrack(newTrack)));
+      if (revision !== state.cameraSwitch || state.localStream !== stream) { newTrack.stop(); return; }
+      if (results.some((r) => r.status === 'rejected')) {
+        await Promise.allSettled(senders.map((sender) => sender.replaceTrack(old)));
+        if (revision !== state.cameraSwitch || state.localStream !== stream) { newTrack.stop(); return; }
+        stream.removeTrack(newTrack);
+        if (old) stream.addTrack(old);
+        newTrack.stop();
+        if (mode === 'real') state.realVideoTrack = null;
+        else { state.virtualTrack = null; state.selfCam?.stop(); }
+        toast('カメラの切替を送信できませんでした。もう一度お試しください。');
         return;
       }
-    } else {
-      newTrack = getVirtualTrack();
-      if (!newTrack) { toast('このブラウザはバーチャルカメラに対応していません'); return; }
-    }
-    const old = state.localStream.getVideoTracks()[0];
-    if (old) state.localStream.removeTrack(old);
-    state.localStream.addTrack(newTrack);
-    for (const peer of state.peers.values()) {
-      const sender = peer.pc.getSenders().find((s) => s.track && s.track.kind === 'video');
-      if (sender) await sender.replaceTrack(newTrack).catch(() => {});
-    }
-    if (mode === 'virtual' && state.realVideoTrack) {
-      state.realVideoTrack.stop();
-      state.realVideoTrack = null;
-    }
-    if (mode === 'real') state.selfCam?.stop();
-    state.cameraMode = mode;
-    attachSelfVideo();
+      if (mode === 'virtual' && state.realVideoTrack) {
+        state.realVideoTrack.stop();
+        state.realVideoTrack = null;
+      }
+      if (mode === 'real') { state.selfCam?.stop(); state.virtualTrack?.stop(); state.virtualTrack = null; }
+      state.cameraMode = mode;
+      attachSelfVideo();
+    } catch {
+      if (mode === 'virtual' && state.cameraMode === 'real') state.selfCam?.stop();
+      toast('映像の切替ができませんでした。');
+      if (!state.localStream?.getVideoTracks().some((tr) => tr.readyState === 'live')) {
+        if (state.room) send({ type: 'leave_door', doorId: state.room.door.id });
+        resetRoom();
+      }
+    } finally { if (revision === state.cameraSwitch) state.switchingCamera = false; }
   }
 
   function stopLocalMedia() {
-    state.localStream?.getTracks().forEach((tr) => { if (tr !== state.virtualTrack) tr.stop(); });
+    ++state.cameraSwitch;
+    state.switchingCamera = false;
+    state.localStream?.getTracks().forEach((tr) => tr.stop());
+    state.virtualTrack?.stop();
+    state.virtualTrack = null;
     state.realVideoTrack?.stop();
     state.audioTrack?.stop();
     state.localStream = null;
@@ -1491,14 +1554,26 @@
   }
 
   async function enterRoom(doorId) {
-    if (state.room) return;
+    if (state.room || state.mediaStarting) return;
     const door = state.doors.find((d) => d.id === doorId);
     if (!door) { state.entering = false; return; }
     state.entering = true;
+    state.mediaStarting = true;
+    clearTimeout(accountTimer);
     audioCtx();
 
     const transition = playDoorTransition(`おじゃまします`);
-    const mode = await startLocalMedia();
+    let mode;
+    try { mode = await startLocalMedia(); }
+    catch (err) {
+      stopLocalMedia();
+      await transition;
+      hideDoorTransition();
+      state.entering = false;
+      state.mediaStarting = false;
+      toast(err.message || '映像を準備できませんでした。');
+      return;
+    }
     await transition;
 
     state.room = {
@@ -1506,7 +1581,7 @@
       startedAt: Date.now(),
       timer: null,
       topicsUsed: [],
-      participants: new Set([state.account, ...door.participants]),
+      participants: new Set([state.account]),
       currentTopic: null,
     };
 
@@ -1526,6 +1601,8 @@
     window.scrollTo({ top: 0 });
     hideDoorTransition();
     state.entering = false;
+    state.mediaStarting = false;
+    const roomSession = state.room;
 
     // 家族シミュレーター（1人でも寂しくないように）
     const simName = door.occupantAccount && door.occupantAccount !== state.account
@@ -1538,7 +1615,7 @@
     updateSimulatorVisibility();
     state.simCam.start();
     setTimeout(() => {
-      if (!state.room) return;
+      if (state.room !== roomSession) return;
       state.simCam.wave();
       state.simCam.say('あら、いらっしゃい！顔が見られて嬉しいわ。');
     }, 600);
@@ -1556,7 +1633,7 @@
       toast('📷 カメラが使えないため「🍵 バーチャル茶の間カメラ」で入室しました。顔を見せ合う団らんはそのままです。', { duration: 6000 });
     }
     // 最初の1枚を自動でめくって、会話のきっかけに
-    setTimeout(() => { if (state.room && !state.room.currentTopic) drawRandomTopic(); }, 1800);
+    setTimeout(() => { if (state.room === roomSession && !state.room.currentTopic) drawRandomTopic(); }, 1800);
   }
 
   function renderParticipants() {
@@ -1634,6 +1711,7 @@
 
   async function drawRandomTopic() {
     if (!state.room) return;
+    const room = state.room;
     setBusy(el.drawTopicBtn, true, '🎴 カードをめくっています…');
     let topic = null;
     let source = 'curated-100';
@@ -1649,6 +1727,7 @@
     if (!topic) topic = localRandomTopic();
     await sleep(250);
     setBusy(el.drawTopicBtn, false);
+    if (state.room !== room) return;
     showTopic(topic, { source });
     shareTopic(topic);
   }
@@ -1663,11 +1742,12 @@
       `${d.getMonth() + 1}月の${timeOfDay}、離れて暮らす家族とのビデオ団らん`,
       recent ? `さっきまでの話題：${recent}` : '',
       memo ? `気づいたこと：${memo}` : '',
-    ].filter(Boolean).join('。');
+    ].filter(Boolean).join('。').slice(0, 2000);
   }
 
   async function generateGeminiTopic() {
     if (!state.room) return;
+    const room = state.room;
     setBusy(el.geminiTopicBtn, true, '✨ Gemini が話題を考えています…');
     const others = [...state.room.participants].filter((n) => n !== state.account);
     let topic = null;
@@ -1690,7 +1770,7 @@
       source = 'gemini-fallback';
     }
     setBusy(el.geminiTopicBtn, false);
-    if (!topic) return;
+    if (!topic || state.room !== room) return;
     if (source === 'gemini-fallback') toast('✨ Gemini がひと休み中のため、100選からぴったりのカードを選びました');
     showTopic(topic, { source });
     shareTopic(topic, source);
@@ -1764,10 +1844,23 @@
   // ------------------------------------------------------------------
   // 退室 → 安心見守りレポート
   // ------------------------------------------------------------------
+  function resetRoom() {
+    if (state.room) clearInterval(state.room.timer);
+    state.room = null;
+    closeAllPeers();
+    stopLocalMedia();
+    state.simCam?.stop();
+    el.room.hidden = true;
+    el.lobby.hidden = false;
+    el.lobbyControls.hidden = false;
+    el.accountPreview.hidden = false;
+    hideDoorTransition();
+  }
+
   async function leaveRoom() {
     if (!state.room) return;
     const room = state.room;
-    const durationSec = Math.round((Date.now() - room.startedAt) / 1000);
+    const durationSec = Math.min(86400, Math.max(0, Math.round((Date.now() - room.startedAt) / 1000)));
     const notes = el.memoInput.value.trim();
     const participants = [...room.participants].filter(Boolean);
 
@@ -1792,6 +1885,7 @@
     openModal('📓 安心見守りレポート', [
       h('div', { class: 'loading-tea' }, h('span', { class: 'cup' }, '🍵'), h('p', {}, 'Gemini が今日の団らんをふり返っています…')),
     ]);
+    const reportModal = modalRevision;
 
     const payload = {
       doorId: room.door.id,
@@ -1813,7 +1907,7 @@
       summary = localSummary(payload);
     }
     saveLocalLog(summary);
-    renderSummaryModal(summary);
+    if (reportModal === modalRevision && !state.room) renderSummaryModal(summary);
     await loadLogs();
   }
 
@@ -1824,8 +1918,6 @@
     let score = s.vitalityScore;
     if (typeof score === 'string' && score.trim() !== '') score = Number(score);
     if (typeof score !== 'number' || !Number.isFinite(score)) score = null;
-    else if (score <= 5) score *= 20;
-    else if (score <= 10) score *= 10;
     return {
       title: s.title || `${payload.doorName || s.doorName || '家族'}の団らん記録`,
       vitalityScore: score === null ? null : Math.max(0, Math.min(100, Math.round(score))),
@@ -1901,6 +1993,7 @@
     const seen = new Set();
     const merged = [];
     for (const raw of [...server, ...local]) {
+      if (!raw || typeof raw !== 'object') continue;
       const s = normalizeSummary(raw.summary ? { ...raw, ...raw.summary } : raw, raw);
       const key = `${s.title}|${s.createdAt}`;
       if (seen.has(key)) continue;
@@ -1941,7 +2034,7 @@
     clearTimeout(accountTimer);
     accountTimer = setTimeout(() => {
       saveLS(LS.account, name);
-      send({ type: 'join_lobby', accountName: name });
+      if (!state.room && !state.entering) send({ type: 'join_lobby', accountName: name });
       // すでに自分のドアに明かりを灯していれば、新しい名前で即座に更新
       const mine = state.myDoorId && state.doors.find((d) => d.id === state.myDoorId);
       if (mine && mine.occupantAccount) setPresence({ doorId: state.myDoorId, mode: el.modeSelect.value });

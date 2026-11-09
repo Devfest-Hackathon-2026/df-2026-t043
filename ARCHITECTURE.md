@@ -24,7 +24,7 @@ flowchart LR
 ```
 
 - `server/index.js`：`PORT`（既定8080）、`0.0.0.0`で待受。Expressが`public/`、REST、同じHTTPサーバー上の`/ws`を提供する。`require()`では待受を開始せず、`{ app, server }`を公開する。
-- `server/geminiService.js`：`@google/genai`の`GoogleGenAI`で3種類の生成を行う。モデルは指定どおり`gemini-2.5-flash`に固定する（既存の`.env.example`の`GEMINI_MODEL`は使用しない）。APIキーは`process.env.GEMINI_API_KEY`だけから読む。
+- `server/geminiService.js`：`@google/genai`の`GoogleGenAI`で3種類の生成を行う。モデルは既定`gemini-2.5-flash`で、`GEMINI_MODEL`で変更できる（空白だけなら既定値）。APIキーは`process.env.GEMINI_API_KEY`だけから読む。
 - `public/data/topics.json`：100件の初期デッキ。APIが使えないときも団らんを継続できる。静的カードの選択とGemini生成は`source`で区別する。
 - フロントエンドの担当は別系統。カメラ取得、デモ用Canvas映像、WebRTCピア接続、WSS再接続、ドア・話題カードの描画を担う。サーバーは映像・音声を中継・録画しない。
 
@@ -45,13 +45,13 @@ flowchart LR
 |---|---|
 | `GET /api/health` | `{ ok, service, geminiConfigured, model, timestamp }`。キー有無の確認でありGemini疎通確認ではない |
 | `GET /api/doors` | `{ doors: [...] }`。`participants`は表示名配列、`participantCount`は初期在室者と接続中の参加者の表示名を重複除去した数 |
-| `POST /api/doors/:id/presence` | `{ door }`。modeは`relaxing`（既定）/`busy`/`away`。画像はJPEG/PNG/WebPのdata URL、またはJPEGの生Base64 |
+| `POST /api/doors/:id/presence` | `{ door, doors }`。modeは`relaxing`（既定）/`busy`/`away`。画像はJPEG/PNG/WebPのdata URL、またはJPEGの生Base64 |
 | `GET /api/topics/random?category=...` | `{ topic, totalPool, source: "curated-100" }`。`totalPool`はカテゴリ適用後の件数。カテゴリ未一致は404 |
 | `POST /api/topics/generate` | `{ topic: { id, category, topic, hint }, source }`。生成IDは`gemini-UUID`、初期カードIDは数値。`source`は`gemini`または`curated-100` |
 | `POST /api/summary` | 入力`{ doorName, participants, durationSec, topicsUsed, notes }`。participantsは表示名、または`{accountName}`の配列。topicsUsedは話題カードまたは話題文の配列。返却`{ summary, source }` |
 | `GET /api/logs` | `{ logs: [...] }`。新しい順。各記録は`id, doorName, participants, durationSec, topicsUsed, title, vitalityScore, mood, highlights, nextTopicSuggestion, createdAt, source` |
 
-不正入力400、未知ドア/カテゴリ/API404、過大JSON413、頻度制限429をJSONの`{ error }`で返す。生成失敗時は500ではなくフォールバック結果を返す。HTTP JSON上限6MB、画像文字列上限5,600,000文字、名前80文字、在室メモ1,000文字、要約メモ4,000文字。POST生成系は接続元IPごとに合計30回/分。同一プロキシ配下では制限を共有するため、Cloud Run上では保守的な共通制限になり得る。
+不正入力400、未知ドア/カテゴリ/API404、過大JSON413、頻度制限429をJSONの`{ error }`で返す。生成失敗時は500ではなくフォールバック結果を返す。HTTP JSON上限6MB、画像文字列上限5,600,000文字、名前80文字、在室メモ1,000文字、要約メモ4,000文字。POST生成系は接続元IPごとに合計120回/分。同一プロキシ配下では制限を共有するため、Cloud Run上では保守的な共通制限になり得る。
 
 サービス層の公開関数：
 
@@ -70,7 +70,7 @@ flowchart LR
 - `enter_door`で移動前の部屋から退出し、同室者全員へ`room_state`、全接続へ`doors_update`を配信する。重複入室は人数を増やさない。同室の上限8接続、全体100接続。
 - `webrtc_signal.targetId`には`participants[].id`を指定する。送信者・送信先とも同じ部屋にいる場合だけ中継する。`fromId`と`accountName`はサーバーが接続情報から設定する。`payload`はSDP/ICE等のJSONオブジェクトで、メディアは含めない。
 - ノックはロビーも含め全接続に通知する。共有話題は同室者にだけ配信し、`drawnBy`は接続のアカウント名を採用する。最後の参加者が退室したら共有話題を消去する。
-- 不正なメッセージには`{ type: "error", code, message }`を返し、処理を継続する。64KiB上限、1接続300メッセージ/分。30秒間隔のping/pongと切断時の退室処理で参加者を清掃する。
+- 不正なメッセージには`{ type: "error", requestType, code, message }`を返し、処理を継続する。64KiB上限、1接続300メッセージ/分。30秒間隔のping/pongと切断時の退室処理で参加者を清掃する。
 - 再接続するとIDは変わる。フロントはバックオフで再接続し、`join_lobby`→カメラ確認→`enter_door`→新IDでSDP/ICE再交換を行う。古いピア接続は閉じる。
 
 ## Cloud Runで動かす
@@ -97,7 +97,7 @@ gcloud config set project $projectId
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
 # Secret Managerにgemini-api-keyを登録し、実行サービスアカウントに当該シークレットの
 # roles/secretmanager.secretAccessor を付与する。キーをCLI引数やGitへ書かない。
-gcloud run deploy tonari-door --source . --region $region --allow-unauthenticated --port 8080 --timeout 3600 --concurrency 80 --min-instances 1 --max-instances 1 --session-affinity --set-secrets GEMINI_API_KEY=gemini-api-key:latest
+gcloud run deploy tonari-door-danran --source . --region $region --allow-unauthenticated --port 8080 --timeout 3600 --concurrency 80 --min-instances 1 --max-instances 1 --session-affinity --set-secrets GEMINI_API_KEY=gemini-api-key:latest
 ```
 
 ソースデプロイ時は`.gcloudignore`、コンテナビルド時は`.dockerignore`で`.env`、認証ファイル、ローカル作業データ等を確実に除外してから実行する。現行Dockerfileは`COPY . .`を使うため、この除外設定は公開前の必須作業。実行サービスアカウントは専用の最小権限アカウントを推奨する。発行されたHTTPS URLと`wss://同ホスト/ws`を利用する。
@@ -129,6 +129,6 @@ WebRTCはCloud RunのHTTPサーバーを映像中継に使わない。異なる�
 | 課題への有効性 | 抽象化した声かけタイミングと顔を見た団らん | 高齢者を含む利用者で有用性を確認 |
 | デモの明瞭さ | 4ドア・100話題・キーなし継続・記録API | デモ映像と実映像を区別した2画面デモ |
 
-提出準備にはREADME（セットアップ/デプロイ/図）、デプロイURL維持、説明資料・動画・著作物利用シート・ピッチの整備が残る。READMEやフロントの作成は本変更の範囲外。OSSは既存依存のライセンスを著作物利用シートに記載する。2026-11-10 19:00 JST以降のコードフリーズとRegional Day終了までのURL維持は`AGENTS.md`に従う。
+提出準備にはREADME（セットアップ/デプロイ/図）、デプロイURL維持、説明資料・動画・著作物利用シート・ピッチの整備が残る。READMEとフロントは実装済み。提出資料のURL欄は未記入のため、実デプロイ後の確認が必要。OSSは既存依存のライセンスを著作物利用シートに記載する。2026-11-10 19:00 JST以降のコードフリーズとRegional Day終了までのURL維持は`AGENTS.md`に従う。
 
 SDKの構造化出力と画像入力は[Google GenAI SDK公式ソース](https://github.com/googleapis/js-genai/blob/main/src/types.ts)およびインストール済み`@google/genai`の型定義を参照した。モデル出力はJSONスキーマに加えアプリ側でも検証する。

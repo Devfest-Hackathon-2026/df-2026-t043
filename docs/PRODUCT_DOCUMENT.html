@@ -223,7 +223,7 @@
     <li>☐ Google Kubernetes Engine（GKE）</li>
     <li>☑ <strong>Cloud Run</strong></li>
     <li>☐ Firebase App Hosting</li>
-    <li>☑ <strong>Firebase Hosting</strong>（設定対応済・メイン実行基盤は Cloud Run）</li>
+    <li>☐ <strong>Firebase Hosting</strong>（静的なひとりデモ用設定のみ。共同利用は Cloud Run URL）</li>
   </ul>
 
   <h3>3.2.　Google技術の活用例</h3>
@@ -407,5 +407,10 @@
     </ul>
   </div>
 
+<section class="box">
+    <h2>現実装の検証範囲・制約</h2>
+    <p>初期在室者・バーチャル映像はデモであり、実在者の顔色・安否を示しません。要約は時間・話題・参加者・任意メモから作り、通話映像・音声は解析しません。AI失敗時やメモのない場合の元気度は未評価です。</p>
+    <p>現状は認証なし・インメモリ共有のデモです。家族単位の認可、永続化、TURNは未実装です。Cloud Runの単一インスタンスで使用し、実デプロイURLと2端末での接続を提出前に確認してください。URL欄は現時点でプレースホルダーです。</p>
+  </section>
 </body>
 </html>

@@ -33,9 +33,9 @@ const presenceVersions = new Map();
 
 function fail(message, status = 400) { const error = new Error(message); error.status = status; throw error; }
 function record(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
-function field(value, name, max, required = false) {
+function field(value, name, max, required = false, multiline = false) {
   if (value === undefined && !required) return '';
-  if (typeof value !== 'string' || value.length > max || (required && !value.trim()) || /[\u0000-\u001f\u007f]/.test(value)) fail(`${name}が不正です。`);
+  if (typeof value !== 'string' || value.length > max || (required && !value.trim()) || (multiline ? /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/ : /[\u0000-\u001f\u007f]/).test(value)) fail(`${name}が不正です。`);
   return value.trim();
 }
 function getDoor(id) { const door = doors.get(id); if (!door) fail('ドアが見つかりません。', 404); return door; }
@@ -111,15 +111,16 @@ app.post('/api/doors/:id/presence', rateLimit, asyncRoute(async (req, res) => {
   // Remove this accountName from other doors so the user's presence only lights up the selected door.
   for (const other of doors.values()) {
     if (other.id !== door.id && other.occupantAccount === accountName) {
+      presenceVersions.set(other.id, (presenceVersions.get(other.id) || 0) + 1);
       const defOcc = defaultOccupants.get(other.id);
-      if (defOcc && defOcc !== accountName) {
+      if (defOcc && defOcc !== accountName && ![...doors.values()].some((d) => d.id !== other.id && d.occupantAccount === defOcc)) {
         Object.assign(other, {
           occupantAccount: defOcc,
           mode: 'relaxing',
           statusText: `-${defOcc}-がくつろいでいます。`,
           timingScore: 'good',
           timingLabel: '◎ 声をかけるのにぴったり',
-          aiDetail: 'リビングでゆっくり過ごしています。今なら気兼ねなく話しかけられます。',
+          aiDetail: 'デモ用の初期在室設定です。AIによる様子の確認は行っていません。',
           source: 'demo',
           updatedAt: new Date().toISOString(),
         });
@@ -159,12 +160,12 @@ app.get('/api/topics/random', (req, res, next) => {
 });
 app.post('/api/topics/generate', rateLimit, asyncRoute(async (req, res) => {
   const input = {};
-  for (const [key, max] of Object.entries({ accountName: 80, partnerAccount: 80, doorName: 120, context: 2000 })) input[key] = field(req.body[key], key, max);
+  for (const [key, max] of Object.entries({ accountName: 80, partnerAccount: 80, doorName: 120, context: 2000 })) input[key] = field(req.body[key], key, max, false, key === 'context');
   res.json(await generateDanranTopic({ ...input, fallbackTopics: topics }));
 }));
 app.post('/api/summary', rateLimit, asyncRoute(async (req, res) => {
   const doorName = field(req.body.doorName, 'doorName', 120);
-  const notes = field(req.body.notes, 'notes', 4000);
+  const notes = field(req.body.notes, 'notes', 4000, false, true);
   const durationSec = req.body.durationSec === undefined ? 0 : req.body.durationSec;
   if (typeof durationSec !== 'number' || !Number.isFinite(durationSec) || durationSec < 0 || durationSec > 86400) fail('durationSecが不正です。');
   const participants = req.body.participants === undefined ? [] : req.body.participants;
@@ -201,11 +202,11 @@ wss.on('connection', (ws) => {
   ws.on('error', () => { /* close handles room cleanup; no sensitive payload logging */ });
   ws.on('close', () => { leave(client); clients.delete(client.id); });
   ws.on('message', (data, isBinary) => {
+    let message;
     try {
       if (Date.now() - client.window >= 60_000) { client.count = 0; client.window = Date.now(); }
       if (++client.count > 300) { ws.close(1008, 'Too many messages'); return; }
       if (isBinary) fail('JSONテキストを送信してください。');
-      let message;
       try { message = JSON.parse(data.toString()); } catch { fail('JSONの形式が不正です。'); }
       if (!record(message)) fail('メッセージが不正です。');
       if (message.type === 'join_lobby') {
@@ -226,7 +227,8 @@ wss.on('connection', (ws) => {
         const name = field(message.accountName, 'accountName', 80, true);
         broadcast({ type: 'knock_notification', doorId: door.id, fromAccount: name, fromId: client.id });
       } else if (message.type === 'leave_door') {
-        if (client.doorId === door.id) leave(client);
+        if (client.doorId && client.doorId !== door.id) fail('入室中のドアを指定してください。');
+        leave(client);
         send(client, { type: 'room_state', doorId: door.id, selfId: client.id, participants: [], currentTopic: null });
       } else if (message.type === 'share_topic') {
         if (client.doorId !== door.id) fail('入室していません。', 403);
@@ -241,7 +243,7 @@ wss.on('connection', (ws) => {
         send(target, { type: 'webrtc_signal', doorId: door.id, fromId: client.id, accountName: client.accountName, payload: message.payload });
       } else fail('未対応のメッセージです。');
     } catch (error) {
-      send(client, { type: 'error', code: error.status || 400, message: error.status === 500 ? '処理に失敗しました。' : error.message });
+      send(client, { type: 'error', requestType: typeof message?.type === 'string' ? message.type : undefined, code: error.status || 400, message: error.status === 500 ? '処理に失敗しました。' : error.message });
     }
   });
 });

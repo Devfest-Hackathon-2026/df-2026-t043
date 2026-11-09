@@ -4,7 +4,7 @@ const { GoogleGenAI, Type } = require('@google/genai');
 const { randomUUID, randomInt } = require('node:crypto');
 const curatedTopics = require('../public/data/topics.json');
 
-const MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+const MODEL = (process.env.GEMINI_MODEL || '').trim() || 'gemini-2.5-flash';
 const TIMING_LABELS = {
   good: '◎ 声をかけるのにぴったり',
   maybe: '○ 少しなら話せそう',
@@ -24,7 +24,7 @@ function text(value, max = 500) {
 }
 
 function requiredText(value, max = 500) {
-  if (typeof value !== 'string' || !value.trim() || value.length > max) {
+  if (typeof value !== 'string' || !value.trim() || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) {
     throw new Error('Invalid model text');
   }
   return value.trim();
@@ -75,7 +75,7 @@ function inferFallbackPresence(mode, hint) {
   if (mode === 'busy') {
     return { timingScore: 'busy', aiDetail: '今は手が離せないようです。少し時間をおいてみましょう。' };
   }
-  if (/寝|眠|休|うとうと|お昼寝|風呂|入浴/.test(hint)) {
+  if (/寝|眠|うとうと|お昼寝|風呂|入浴/.test(hint)) {
     return { timingScore: 'busy', aiDetail: `${hint}のようです。今はそっとしておいて、あとで声をかけましょう。` };
   }
   if (/料理|掃除|洗濯|電話|支度|忙|作業|片付/.test(hint)) {
@@ -84,7 +84,7 @@ function inferFallbackPresence(mode, hint) {
   if (hint) {
     return { timingScore: 'good', aiDetail: `${hint}の様子です。今なら気兼ねなく話しかけられます。` };
   }
-  return { timingScore: 'good', aiDetail: 'リビングでゆっくり過ごしています。今なら気兼ねなく話しかけられます。' };
+  return { timingScore: 'good', aiDetail: '本人のくつろぎ設定を表示しています。画像や会話からの様子の確認は行っていません。' };
 }
 
 async function analyzeDoorPresence({ accountName, mode = 'relaxing', activityHint, imageBase64 } = {}) {
@@ -137,12 +137,10 @@ async function generateCareSummary({ doorName, participants = [], durationSec = 
   const mins = Math.max(1, Math.round((Number(durationSec) || 0) / 60));
   const names = participants.map((p) => text(typeof p === 'string' ? p : p?.accountName, 80)).filter(Boolean);
   const topicTitles = topicsUsed.map((t) => text(typeof t === 'string' ? t : t?.topic, 200)).filter(Boolean);
-  const fallbackVitality = /疲|咳|寒|痛|しんど/.test(cleanNotes) ? 68 : /笑|元気|良|楽し|食欲/.test(cleanNotes) ? 92 : 84;
+  const fallbackVitality = null;
   const fallbackMood = cleanNotes
-    ? `メモ「${cleanNotes.slice(0, 60)}」を中心に、温かく様子を確認できました。`
-    : topicTitles.length
-      ? `話題カードをきっかけに、顔を見ながら穏やかな団らんができました。`
-      : `顔を見て声をかけ合い、安心できる時間を過ごせました。`;
+    ? `メモ「${cleanNotes.slice(0, 60)}」を記録しました。様子は未評価です。`
+    : '様子は未評価です。映像・音声の解析は行っていません。';
   const fallbackHighlights = [
     `団らん時間：約${mins}分`,
     `参加者：${names.join('、') || '家族'}`,
@@ -160,7 +158,7 @@ async function generateCareSummary({ doorName, participants = [], durationSec = 
   };
   try {
     const result = await generateJson(
-      '家族の団らん記録を温かく要約する。vitalityScoreは0〜100の非医療的な会話の活気・安心度の目安。highlightsは2〜4件。次回の団らんにおすすめの話題を1つ提案する。',
+      '家族の団らん記録を温かく要約する。vitalityScoreはメモに根拠がある場合だけ0〜100の非医療的な会話の活気の目安とし、根拠不足時はnull。映像・音声は提供されていない。highlightsは2〜4件。次回の団らんにおすすめの話題を1つ提案する。',
       { doorName: text(doorName, 120), participants: names.slice(0, 20), durationSec, topicsUsed: topicTitles.slice(0, 30), notes: cleanNotes },
       objectSchema({ title: stringSchema, vitalityScore: { type: Type.NUMBER, nullable: true }, mood: stringSchema, highlights: { type: Type.ARRAY, items: stringSchema }, nextTopicSuggestion: stringSchema }),
     );
@@ -168,7 +166,7 @@ async function generateCareSummary({ doorName, participants = [], durationSec = 
     if (result.vitalityScore !== null && (typeof result.vitalityScore !== 'number' || !Number.isFinite(result.vitalityScore) || result.vitalityScore < 0 || result.vitalityScore > 100)) throw new Error('Invalid vitality');
     return {
       title: requiredText(result.title, 160),
-      vitalityScore: result.vitalityScore ?? fallbackVitality,
+      vitalityScore: cleanNotes ? result.vitalityScore : null,
       mood: requiredText(result.mood, 160),
       highlights: result.highlights.map((value) => requiredText(value)),
       nextTopicSuggestion: requiredText(result.nextTopicSuggestion),
