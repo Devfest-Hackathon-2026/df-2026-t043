@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#5a3a1e" />
   <meta name="description" content="となりドア — 声をかけるタイミングがわかる、家族の団らんドア。ドアの明かりで気配を知り、ノックしてビデオで団らん。" />
   <title>となりドア — 家族の団らんドア</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%9A%AA%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet" />
@@ -24,10 +23,31 @@
     </div>
 
     <div class="controls" id="lobbyControls">
-      <label class="field field-account">
-        <span class="field-label">あなたのアカウント名（ドアに表示されます）</span>
+      <label class="field">
+        <span class="field-label">あなたのアカウント名</span>
         <input id="accountInput" type="text" maxlength="24" autocomplete="nickname" value="yoikoarmor" aria-describedby="accountPreview" />
       </label>
+
+      <label class="field">
+        <span class="field-label">くつろぐドア</span>
+        <select id="myDoorSelect" aria-label="自分がくつろぐドアを選ぶ"></select>
+      </label>
+
+      <label class="field">
+        <span class="field-label">いまの様子</span>
+        <select id="modeSelect" aria-label="いまの様子">
+          <option value="relaxing">🛋️ くつろぎ中</option>
+          <option value="busy">🍳 ちょっと手が離せない</option>
+          <option value="away">🚶 お出かけ中</option>
+        </select>
+      </label>
+
+      <button id="setPresenceBtn" class="btn btn-lamp" type="button">
+        🏮 ここでくつろぐ
+      </button>
+      <button id="geminiPresenceBtn" class="btn btn-indigo" type="button">
+        📸 カメラ/状況からGeminiで声かけタイミングを更新
+      </button>
     </div>
 
     <div class="conn" id="connStatus" role="status" aria-live="polite">
@@ -36,15 +56,14 @@
   </header>
 
   <p class="account-preview" id="accountPreview" aria-live="polite">
-    ドアに入ると、廊下のドアにこう表示されます：<strong id="accountPreviewText">-yoikoarmor-がくつろいでいます。</strong>
+    ドアに出るあなたの気配：<strong id="accountPreviewText">-yoikoarmor-がくつろいでいます。</strong>
   </p>
 
   <!-- ============ ロビー（ドアの並ぶ廊下） ============ -->
   <main id="lobby" class="screen lobby" aria-label="ドアの並ぶ廊下">
     <section class="hallway-intro">
-      <h2>4つのドアは、それぞれ別々の団らんルームです。</h2>
-      <p>明かりが灯っているドアの向こうでは、家族がくつろいでいます。ノックして入ると、顔を見ながらのビデオ団らんが始まります。空いているドアに入って、家族が来るのを待つこともできます。</p>
-      <p class="hallway-live" id="hallwayLive" role="status" aria-live="polite"></p>
+      <h2>ドアの明かりを見て、そっと声をかけてみましょう。</h2>
+      <p>明かりが灯っているドアの向こうでは、家族がくつろいでいます。ノックして入ると、顔を見ながらの団らんが始まります。</p>
     </section>
 
     <section class="hallway" aria-label="ドア一覧">
@@ -63,7 +82,7 @@
     </section>
 
     <footer class="lobby-foot">
-      <p>🔒 廊下に出るのは「だれが入室中か」だけ。映像は同じドアに入った家族どうしにだけ届き、録画・保存はしません。　Powered by Gemini · Google Cloud Run</p>
+      <p>🔒 生の映像を見張るのではなく、Gemini が「気配のひとこと」に置きかえて伝えます。　Powered by Gemini 2.5 Flash · Google Cloud Run</p>
     </footer>
   </main>
 
@@ -77,7 +96,6 @@
       <div class="room-title">
         <span class="room-icon" id="roomIcon">🍵</span>
         <div>
-          <span class="room-number" id="roomNumber">ドア 1</span>
           <h2 id="roomName">実家の茶の間</h2>
           <p class="room-sub" id="roomSub">温かいお茶とテレビの音</p>
         </div>
@@ -86,7 +104,6 @@
         <span class="badge badge-video" title="顔を見て安心するために、この部屋ではカメラが常にONです">
           📹 顔を見て安心するためのビデオ団らん（カメラ常時ON）
         </span>
-        <span class="badge badge-count" id="roomCount" aria-label="在室人数">👥 1人</span>
         <span class="badge badge-timer" aria-label="団らん時間">⏱ <span id="roomTimer">00:00</span></span>
       </div>
     </header>
@@ -94,67 +111,43 @@
     <div class="room-body">
       <div class="stage-col">
         <div class="participants" id="participantsBar" aria-label="この部屋にいる人"></div>
-        <p class="room-waiting" id="roomWaiting" role="status" aria-live="polite" hidden></p>
 
-        <div class="call-stage">
-          <div class="stage" id="remoteStage" aria-label="家族の映像">
-            <!-- 実際の家族が入室するまでの待機カード -->
-            <figure class="video-tile tile-empty" id="simulatorTile">
-              <div class="waiting-content">
-                <span class="waiting-lantern" aria-hidden="true">🏮</span>
-                <h2>家族の入室を待っています</h2>
-                <p>お茶でも飲みながら、ひと休み。<br />同じドアに家族が入ると、ここに相手の映像が映ります。</p>
-                <span class="waiting-badge">明かりを灯して、お待ちしています</span>
-              </div>
-              <div class="reaction-layer"></div>
-            </figure>
-          </div>
+        <div class="stage" id="remoteStage" aria-label="家族の映像">
+          <!-- 家族シミュレーター（1人デモ用） -->
+          <figure class="video-tile tile-family" id="simulatorTile">
+            <canvas id="simulatorCanvas" width="960" height="600" aria-label="家族シミュレーター映像"></canvas>
+            <figcaption class="name-tag" id="simulatorName">-おばあちゃん-</figcaption>
+            <div class="reaction-layer"></div>
+          </figure>
+        </div>
 
-          <div class="self-row">
-            <figure class="video-tile tile-self" id="selfTile">
-              <video id="selfVideo" autoplay playsinline muted></video>
-              <figcaption class="name-tag" id="selfName">-yoikoarmor-</figcaption>
-              <span class="tile-note" id="selfCamNote">実カメラ</span>
-              <div class="reaction-layer"></div>
-            </figure>
+        <div class="self-row">
+          <figure class="video-tile tile-self" id="selfTile">
+            <video id="selfVideo" autoplay playsinline muted></video>
+            <figcaption class="name-tag" id="selfName">-yoikoarmor-</figcaption>
+            <span class="tile-note" id="selfCamNote">実カメラ</span>
+            <div class="reaction-layer"></div>
+          </figure>
 
-            <div class="self-controls">
-              <div class="mini-controls">
-                <button type="button" class="btn btn-soft" id="micBtn" aria-pressed="false">🎙️ マイク ON</button>
-              </div>
-              <details class="call-settings" id="walkCallSettings" open>
-                <summary>カメラ・リアクション</summary>
-                <div class="cam-switch" role="radiogroup" aria-label="カメラの種類">
-                  <button type="button" class="cam-opt" id="camRealBtn" role="radio" aria-checked="true">📷 実カメラ</button>
-                  <button type="button" class="cam-opt" id="camVirtualBtn" role="radio" aria-checked="false">🍵 バーチャル茶の間カメラ</button>
-                </div>
-                <p class="cam-policy">※ この部屋はお互いの顔が見えることを大切にしています。カメラを消すことはできませんが、バーチャル映像に切りかえられます。</p>
-                <div class="reactions" aria-label="リアクション">
-                  <button type="button" class="react" data-emoji="👋" aria-label="手をふる">👋</button>
-                  <button type="button" class="react" data-emoji="😊" aria-label="にっこり">😊</button>
-                  <button type="button" class="react" data-emoji="😂" aria-label="大笑い">😂</button>
-                  <button type="button" class="react" data-emoji="👍" aria-label="いいね">👍</button>
-                  <button type="button" class="react" data-emoji="❤️" aria-label="大好き">❤️</button>
-                  <button type="button" class="react" data-emoji="🍵" aria-label="お茶どうぞ">🍵</button>
-                </div>
-              </details>
+          <div class="self-controls">
+            <div class="cam-switch" role="radiogroup" aria-label="カメラの種類">
+              <button type="button" class="cam-opt" id="camRealBtn" role="radio" aria-checked="true">📷 実カメラ</button>
+              <button type="button" class="cam-opt" id="camVirtualBtn" role="radio" aria-checked="false">🍵 バーチャル茶の間カメラ</button>
+            </div>
+            <p class="cam-policy">※ この部屋はお互いの顔が見えることを大切にしています。カメラを消すことはできませんが、バーチャル映像に切りかえられます。</p>
+            <div class="mini-controls">
+              <button type="button" class="btn btn-soft" id="micBtn" aria-pressed="false">🎙️ マイク ON</button>
+            </div>
+            <div class="reactions" aria-label="リアクション">
+              <button type="button" class="react" data-emoji="👋" aria-label="手をふる">👋</button>
+              <button type="button" class="react" data-emoji="😊" aria-label="にっこり">😊</button>
+              <button type="button" class="react" data-emoji="😂" aria-label="大笑い">😂</button>
+              <button type="button" class="react" data-emoji="👍" aria-label="いいね">👍</button>
+              <button type="button" class="react" data-emoji="❤️" aria-label="大好き">❤️</button>
+              <button type="button" class="react" data-emoji="🍵" aria-label="お茶どうぞ">🍵</button>
             </div>
           </div>
         </div>
-
-        <section class="walk-panel" id="walkPanel" aria-labelledby="walkTitle" hidden>
-          <div class="walk-heading">
-            <h3 id="walkTitle">🚶 一緒にお散歩</h3>
-            <button type="button" class="btn btn-soft" id="walkStop" hidden>散歩を終える</button>
-          </div>
-          <div class="walk-setup" id="walkSetup">
-            <label for="walkPlace">散歩先</label>
-            <select id="walkPlace" disabled></select>
-            <button type="button" class="btn btn-indigo" id="walkStart" disabled>散歩を始める</button>
-          </div>
-          <p class="walk-status" id="walkStatus" role="status" aria-atomic="true">家族とつながると散歩を始められます。</p>
-          <div class="walk-view" id="walkView" role="region" aria-label="ストリートビューの景色" hidden></div>
-        </section>
       </div>
 
       <aside class="side-col">
@@ -179,8 +172,8 @@
           </div>
 
           <div class="topic-actions">
-            <button type="button" class="btn btn-lamp btn-wide" id="drawTopicBtn">📇 話題カード100選から引く</button>
-            <button type="button" class="btn btn-indigo btn-wide" id="geminiTopicBtn" disabled>✨ Gemini で今の話題を作る（未実装）</button>
+            <button type="button" class="btn btn-lamp btn-wide" id="drawTopicBtn">🎲 話題カードをランダムに引く（全100件）</button>
+            <button type="button" class="btn btn-indigo btn-wide" id="geminiTopicBtn" disabled>✨ Geminiで今の話題を作る（未実装）</button>
           </div>
 
           <div class="topic-filter" id="categoryChips" aria-label="カテゴリでしぼる"></div>
@@ -204,7 +197,7 @@
           <textarea id="memoInput" rows="3" maxlength="800" placeholder="例：声が明るかった。来週の通院の話をした。"></textarea>
         </section>
 
-        <button type="button" class="btn btn-leave btn-wide" id="leaveBtn">🚪 ドアを閉めて退室（📝 Geminiが団らんレポートを作成）</button>
+        <button type="button" class="btn btn-leave btn-wide" id="leaveBtn">🚪 ドアを閉めて退室（見守り記録を残す）</button>
       </aside>
     </div>
   </section>
@@ -233,7 +226,6 @@
   <!-- ============ トースト ============ -->
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="walk.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>
