@@ -80,7 +80,9 @@ function leave(client) {
   roomState(previous);
   broadcastDoors();
 }
+function sharedWalkEnabled() { return process.env.ENABLE_SHARED_WALK === 'true'; }
 function handleWalk(client, doorId, message) {
+  if (!sharedWalkEnabled()) fail('散歩機能は一時停止中です。', 403);
   if (client.doorId !== doorId) fail('入室していません。', 403);
   const current = walks.get(doorId);
   if (message.type === 'walk_start') {
@@ -140,7 +142,10 @@ app.use('/api', (req, res, next) => {
 });
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'tonari-door-danran', geminiConfigured: isGeminiConfigured(), model: MODEL, timestamp: new Date().toISOString() }));
 app.get('/api/doors', (req, res) => res.json({ doors: doorList() }));
-app.get('/api/walk-config', (req, res) => res.json({ apiKey: process.env.GOOGLE_MAPS_BROWSER_API_KEY || '', places: walkPlaces }));
+app.get('/api/walk-config', (req, res) => {
+  const enabled = sharedWalkEnabled();
+  res.json({ enabled, apiKey: enabled ? process.env.GOOGLE_MAPS_BROWSER_API_KEY || '' : '', places: enabled ? walkPlaces : [] });
+});
 app.get('/api/topics/random', (req, res, next) => {
   try {
     const category = field(req.query.category, 'category', 80);

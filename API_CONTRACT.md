@@ -56,8 +56,11 @@
 
 共有散歩の行き先と、Maps JavaScript API 用のブラウザーキーを返す。キーは `GOOGLE_MAPS_BROWSER_API_KEY` から読み取り、未設定の場合は空文字を返す。公開先の HTTP リファラーと Maps JavaScript API に制限したキーを設定する。
 
+`ENABLE_SHARED_WALK=true` のときだけ有効。無効時は `{"enabled":false,"apiKey":"","places":[]}` を返し、散歩用 WebSocket メッセージは 403 で拒否する。
+
 ```json
 {
+  "enabled": true,
   "apiKey": "",
   "places": [
     { "id": "asakusa", "name": "浅草", "position": { "lat": 35.711, "lng": 139.796 } },

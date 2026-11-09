@@ -40,6 +40,7 @@
     let authFailed = false;
 
     function render() {
+      panel.hidden = !room?.config || room.config.enabled === false;
       const active = Boolean(session);
       const walking = active && !session.error && pending?.type !== 'walk_stop';
       const previousFocus = document.activeElement;

@@ -66,6 +66,8 @@ npm start
 
 ### Street View co-walk の準備
 
+共同街歩きは初期設定で一時停止中です。再開する場合は、キーを設定したうえで `ENABLE_SHARED_WALK=true` を環境変数に追加します。Cloud Run では新しいリビジョンをデプロイしてください。
+
 1. Google Cloud Console で課金を有効にし、対象プロジェクトの **Maps JavaScript API** を有効化します。
 2. Maps JavaScript API 専用のブラウザキーを作り、API制限を **Maps JavaScript API** のみにします。HTTP リファラー制限には `http://localhost:8080/*` と、実際に発行された Cloud Run ホストの `https://<実ホスト>/*` を登録します。
 3. キーを `.env` の `GOOGLE_MAPS_BROWSER_API_KEY` に設定します。このキーはブラウザから見えるため、制限を必ず設定してください。`GEMINI_API_KEY` はサーバー専用で、ここには使いません。
