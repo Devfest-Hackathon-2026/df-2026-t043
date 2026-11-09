@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#5a3a1e" />
   <meta name="description" content="となりドア — 声をかけるタイミングがわかる、家族の団らんドア。ドアの明かりで気配を知り、ノックしてビデオで団らん。" />
   <title>となりドア — 家族の団らんドア</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%9A%AA%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet" />
@@ -23,31 +24,10 @@
     </div>
 
     <div class="controls" id="lobbyControls">
-      <label class="field">
-        <span class="field-label">あなたのアカウント名</span>
+      <label class="field field-account">
+        <span class="field-label">あなたのアカウント名（ドアに表示されます）</span>
         <input id="accountInput" type="text" maxlength="24" autocomplete="nickname" value="yoikoarmor" aria-describedby="accountPreview" />
       </label>
-
-      <label class="field">
-        <span class="field-label">くつろぐドア</span>
-        <select id="myDoorSelect" aria-label="自分がくつろぐドアを選ぶ"></select>
-      </label>
-
-      <label class="field">
-        <span class="field-label">いまの様子</span>
-        <select id="modeSelect" aria-label="いまの様子">
-          <option value="relaxing">🛋️ くつろぎ中</option>
-          <option value="busy">🍳 ちょっと手が離せない</option>
-          <option value="away">🚶 お出かけ中</option>
-        </select>
-      </label>
-
-      <button id="setPresenceBtn" class="btn btn-lamp" type="button">
-        🏮 ここでくつろぐ
-      </button>
-      <button id="geminiPresenceBtn" class="btn btn-indigo" type="button">
-        📸 カメラ/状況からGeminiで声かけタイミングを更新
-      </button>
     </div>
 
     <div class="conn" id="connStatus" role="status" aria-live="polite">
@@ -56,14 +36,15 @@
   </header>
 
   <p class="account-preview" id="accountPreview" aria-live="polite">
-    ドアに出るあなたの気配：<strong id="accountPreviewText">-yoikoarmor-がくつろいでいます。</strong>
+    ドアに入ると、廊下のドアにこう表示されます：<strong id="accountPreviewText">-yoikoarmor-がくつろいでいます。</strong>
   </p>
 
   <!-- ============ ロビー（ドアの並ぶ廊下） ============ -->
   <main id="lobby" class="screen lobby" aria-label="ドアの並ぶ廊下">
     <section class="hallway-intro">
-      <h2>ドアの明かりを見て、そっと声をかけてみましょう。</h2>
-      <p>明かりが灯っているドアの向こうでは、家族がくつろいでいます。ノックして入ると、顔を見ながらの団らんが始まります。</p>
+      <h2>4つのドアは、それぞれ別々の団らんルームです。</h2>
+      <p>明かりが灯っているドアの向こうでは、家族がくつろいでいます。ノックして入ると、顔を見ながらのビデオ団らんが始まります。空いているドアに入って、家族が来るのを待つこともできます。</p>
+      <p class="hallway-live" id="hallwayLive" role="status" aria-live="polite"></p>
     </section>
 
     <section class="hallway" aria-label="ドア一覧">
@@ -82,7 +63,7 @@
     </section>
 
     <footer class="lobby-foot">
-      <p>🔒 生の映像を見張るのではなく、Gemini が「気配のひとこと」に置きかえて伝えます。　Powered by Gemini 2.5 Flash · Google Cloud Run</p>
+      <p>🔒 廊下に出るのは「だれが入室中か」だけ。映像は同じドアに入った家族どうしにだけ届き、録画・保存はしません。　Powered by Gemini 2.5 Flash · Google Cloud Run</p>
     </footer>
   </main>
 
@@ -96,6 +77,7 @@
       <div class="room-title">
         <span class="room-icon" id="roomIcon">🍵</span>
         <div>
+          <span class="room-number" id="roomNumber">ドア 1</span>
           <h2 id="roomName">実家の茶の間</h2>
           <p class="room-sub" id="roomSub">温かいお茶とテレビの音</p>
         </div>
@@ -104,6 +86,7 @@
         <span class="badge badge-video" title="顔を見て安心するために、この部屋ではカメラが常にONです">
           📹 顔を見て安心するためのビデオ団らん（カメラ常時ON）
         </span>
+        <span class="badge badge-count" id="roomCount" aria-label="在室人数">👥 1人</span>
         <span class="badge badge-timer" aria-label="団らん時間">⏱ <span id="roomTimer">00:00</span></span>
       </div>
     </header>
@@ -111,6 +94,7 @@
     <div class="room-body">
       <div class="stage-col">
         <div class="participants" id="participantsBar" aria-label="この部屋にいる人"></div>
+        <p class="room-waiting" id="roomWaiting" role="status" aria-live="polite" hidden></p>
 
         <div class="stage" id="remoteStage" aria-label="家族の映像">
           <!-- 家族シミュレーター（1人デモ用） -->
@@ -172,8 +156,8 @@
           </div>
 
           <div class="topic-actions">
-            <button type="button" class="btn btn-lamp btn-wide" id="drawTopicBtn">🎲 話題カードをランダムに引く（全100件）</button>
-            <button type="button" class="btn btn-indigo btn-wide" id="geminiTopicBtn">✨ Geminiに今の話題を作ってもらう</button>
+            <button type="button" class="btn btn-lamp btn-wide" id="drawTopicBtn">📇 話題カード100選から引く</button>
+            <button type="button" class="btn btn-indigo btn-wide" id="geminiTopicBtn">✨ Gemini 2.5 Flash で今の話題を作る</button>
           </div>
 
           <div class="topic-filter" id="categoryChips" aria-label="カテゴリでしぼる"></div>
@@ -197,7 +181,7 @@
           <textarea id="memoInput" rows="3" maxlength="800" placeholder="例：声が明るかった。来週の通院の話をした。"></textarea>
         </section>
 
-        <button type="button" class="btn btn-leave btn-wide" id="leaveBtn">🚪 ドアを閉めて退室（見守り記録を残す）</button>
+        <button type="button" class="btn btn-leave btn-wide" id="leaveBtn">🚪 ドアを閉めて退室（📝 Geminiが団らんレポートを作成）</button>
       </aside>
     </div>
   </section>

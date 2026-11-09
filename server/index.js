@@ -6,7 +6,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { randomUUID, randomInt } = require('node:crypto');
 const { WebSocketServer, WebSocket } = require('ws');
-const { analyzeDoorPresence, generateDanranTopic, generateCareSummary, isGeminiConfigured, MODEL } = require('./geminiService');
+const { generateDanranTopic, generateCareSummary, isGeminiConfigured, MODEL } = require('./geminiService');
 const topics = require('../public/data/topics.json');
 
 const app = express();
@@ -16,20 +16,15 @@ const clients = new Map();
 const logs = [];
 const rates = new Map();
 const definitions = [
-  ['chanoma', '実家の茶の間', '温かいお茶とテレビの音', '🍵', 'warm-wood', 'おばあちゃん'],
-  ['engawa', '日当たりのいい縁側', 'ひだまりでのんびりひと休み', '🌿', 'sunny-green', '母（実家）'],
-  ['kitchen', '夕暮れの台所・ダイニング', 'ごはんの香りに誘われて', '🍲', 'sunset-orange', 'kaigunn_2020'],
-  ['hobby', 'みんなの趣味部屋', '好きなことを持ち寄ろう', '🎨', 'hobby-purple', 'yoikoarmor'],
+  ['chanoma', '実家の茶の間', '温かいお茶とテレビの音', '🍵', 'warm-wood'],
+  ['engawa', '日当たりのいい縁側', 'ひだまりでのんびりひと休み', '🌿', 'sunny-green'],
+  ['kitchen', '夕暮れの台所・ダイニング', 'ごはんの香りに誘われて', '🍲', 'sunset-orange'],
+  ['hobby', 'みんなの趣味部屋', '好きなことを持ち寄ろう', '🎨', 'hobby-purple'],
 ];
-const doors = new Map(definitions.map(([id, name, subtitle, icon, theme, occupantAccount]) => [id, {
-  id, name, subtitle, icon, theme, occupantAccount, mode: 'relaxing',
-  statusText: `-${occupantAccount}-がくつろいでいます。`, timingScore: 'good',
-  timingLabel: '◎ 声をかけるのにぴったり', aiDetail: 'デモ用の初期在室設定です。AIによる様子の確認は行っていません。',
-  source: 'demo', updatedAt: new Date().toISOString(),
+const doors = new Map(definitions.map(([id, name, subtitle, icon, theme], index) => [id, {
+  id, number: index + 1, name, subtitle, icon, theme, updatedAt: new Date().toISOString(),
 }]));
-const defaultOccupants = new Map(definitions.map(([id, , , , , occupantAccount]) => [id, occupantAccount]));
 const currentTopics = new Map();
-const presenceVersions = new Map();
 
 function fail(message, status = 400) { const error = new Error(message); error.status = status; throw error; }
 function record(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
@@ -42,8 +37,12 @@ function getDoor(id) { const door = doors.get(id); if (!door) fail('ドアが見
 function members(doorId) { return [...clients.values()].filter((client) => client.doorId === doorId); }
 function doorList() {
   return [...doors.values()].map((door) => {
-    const participants = [...new Set([...(door.mode === 'away' ? [] : [door.occupantAccount]), ...members(door.id).map((client) => client.accountName)].filter(Boolean))];
-    return { ...door, participants, participantCount: participants.length };
+    // Each entered connection is a participant, even when display names match.
+    const participants = members(door.id).map((client) => client.accountName);
+    const statusText = participants.length === 0 ? '空室 — ノックして団らんを始める'
+      : participants.length === 1 ? `-${participants[0]}-がくつろいでいます。`
+        : `-${participants[0]}-ほか計${participants.length}人が団らん中`;
+    return { ...door, participants, participantCount: participants.length, isOpen: participants.length > 0, statusText };
   });
 }
 function send(client, message) {
@@ -52,7 +51,10 @@ function send(client, message) {
   client.ws.send(JSON.stringify(message));
 }
 function broadcast(message, recipients = clients.values()) { for (const client of recipients) send(client, message); }
-function broadcastDoors() { broadcast({ type: 'doors_update', doors: doorList() }); }
+function broadcastDoors() {
+  const list = doorList();
+  for (const client of clients.values()) send(client, { type: 'doors_update', clientId: client.id, doors: list });
+}
 function roomState(doorId) {
   const peers = members(doorId).map(({ id, accountName }) => ({ id, accountName, videoEnabled: true }));
   for (const client of members(doorId)) send(client, { type: 'room_state', doorId, selfId: client.id, participants: peers, currentTopic: currentTopics.get(doorId) || null });
@@ -61,6 +63,7 @@ function leave(client) {
   const previous = client.doorId;
   if (!previous) return;
   client.doorId = null;
+  getDoor(previous).updatedAt = new Date().toISOString();
   if (!members(previous).length) currentTopics.delete(previous);
   roomState(previous);
   broadcastDoors();
@@ -98,58 +101,6 @@ app.use('/api', (req, res, next) => {
 });
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'tonari-door-danran', geminiConfigured: isGeminiConfigured(), model: MODEL, timestamp: new Date().toISOString() }));
 app.get('/api/doors', (req, res) => res.json({ doors: doorList() }));
-app.post('/api/doors/:id/presence', rateLimit, asyncRoute(async (req, res) => {
-  const door = getDoor(req.params.id);
-  const accountName = field(req.body.accountName, 'accountName', 80, true);
-  const mode = req.body.mode === undefined ? 'relaxing' : req.body.mode;
-  if (!['relaxing', 'busy', 'away'].includes(mode)) fail('modeが不正です。');
-  const activityHint = field(req.body.activityHint, 'activityHint', 1000);
-  const imageBase64 = field(req.body.imageBase64, 'imageBase64', 5_600_000);
-  if (imageBase64 && !/^(?:data:image\/(?:jpeg|png|webp);base64,)?[A-Za-z0-9+/]+={0,2}$/.test(imageBase64)) fail('画像はJPEG/PNG/WebPのBase64で送信してください。');
-  const version = (presenceVersions.get(door.id) || 0) + 1;
-  presenceVersions.set(door.id, version);
-  // Remove this accountName from other doors so the user's presence only lights up the selected door.
-  for (const other of doors.values()) {
-    if (other.id !== door.id && other.occupantAccount === accountName) {
-      presenceVersions.set(other.id, (presenceVersions.get(other.id) || 0) + 1);
-      const defOcc = defaultOccupants.get(other.id);
-      if (defOcc && defOcc !== accountName && ![...doors.values()].some((d) => d.id !== other.id && d.occupantAccount === defOcc)) {
-        Object.assign(other, {
-          occupantAccount: defOcc,
-          mode: 'relaxing',
-          statusText: `-${defOcc}-がくつろいでいます。`,
-          timingScore: 'good',
-          timingLabel: '◎ 声をかけるのにぴったり',
-          aiDetail: 'デモ用の初期在室設定です。AIによる様子の確認は行っていません。',
-          source: 'demo',
-          updatedAt: new Date().toISOString(),
-        });
-      } else {
-        Object.assign(other, {
-          occupantAccount: '',
-          mode: 'away',
-          statusText: 'いまは誰もいません。',
-          timingScore: 'busy',
-          timingLabel: '… だれもいません',
-          aiDetail: 'ノックして中で待っていると、家族が来てくれるかもしれません。',
-          source: 'demo',
-          updatedAt: new Date().toISOString(),
-        });
-      }
-    }
-  }
-  // Apply the user's explicit setting immediately; an older AI response must never overwrite a newer setting.
-  Object.assign(door, await analyzeDoorPresence({ accountName, mode }), { occupantAccount: accountName, mode, updatedAt: new Date().toISOString() });
-  broadcastDoors();
-  if (activityHint || imageBase64) {
-    const analysis = await analyzeDoorPresence({ accountName, mode, activityHint, imageBase64 });
-    if (presenceVersions.get(door.id) === version) {
-      Object.assign(door, analysis, { updatedAt: new Date().toISOString() });
-      broadcastDoors();
-    }
-  }
-  res.json({ door: doorList().find((item) => item.id === door.id), doors: doorList() });
-}));
 app.get('/api/topics/random', (req, res, next) => {
   try {
     const category = field(req.query.category, 'category', 80);
@@ -222,6 +173,7 @@ wss.on('connection', (ws) => {
         if (client.doorId !== door.id && members(door.id).length >= 8) fail('部屋が満員です。');
         if (client.doorId !== door.id) leave(client);
         client.accountName = name; client.doorId = door.id;
+        door.updatedAt = new Date().toISOString();
         roomState(door.id); broadcastDoors();
       } else if (message.type === 'knock_door') {
         const name = field(message.accountName, 'accountName', 80, true);

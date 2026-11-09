@@ -1,138 +1,63 @@
-# 『となりドア (Tonari Door)』— フロントエンド・バックエンド共通仕様書 (API_CONTRACT.md)
+# 『となりドア (Tonari Door)』— 新方針・共通インターフェース仕様書 (API_CONTRACT.md)
 
-本ドキュメントは、**Codex (`codex-sol6.1-high`)** が担当する構成詳細・サーバー実装 (`server/`, `ARCHITECTURE.md`) と、**Claude Code (`opus-5.5-mid`)** が担当するドアUI・団らんルームUI (`public/`) のインターフェースを厳密に統一するための契約仕様です。
+## 1. 新しいプロダクト方針（2026-11-09 方針変更）
 
----
-
-## 1. 最重要プロダクト仕様（ユーザー指定事項）
-
-1. **ドア越しの気配表示フォーマット（厳守）**
-   - 各ドアのプレート・気配表示は、在室者がくつろいでいる際、必ず以下のフォーマットで表示すること：
-     **`-{アカウント名}-がくつろいでいます。`**
-   - 例：
-     - `-おばあちゃん-がくつろいでいます。`
-     - `-母（実家）-がくつろいでいます。`
-     - `-kaigunn_2020-がくつろいでいます。`
-     - `-yoikoarmor-がくつろいでいます。`
-   - ユーザーが自分のアカウント名を入力・変更して「在室（くつろぎ中）」に設定すると、即座に該当ドアの表示が `-{入力したアカウント名}-がくつろいでいます。` に切り替わること。
-
-2. **あえてビデオ通話を強制する「ビデオ会議の団らん化」**
-   - ドアを開けて部屋（団らんルーム）に入るには、**カメラON（ビデオ通話）が必須**。
-   - 実カメラが利用できないPCや、1人で動作確認・デモをする場合のために、**「デモ用バーチャルカメラ（Canvasアニメーションによる温かい在室映像シミュレーター）」**へのワンタップ自動/手動切替を備え、必ず「お互いの映像（顔・様子）が見える状態」で団らんルームに入室する体験を実現すること。
-
-3. **話題カード（100件の初期デッキ ＋ Gemini API 生成）**
-   - `public/data/topics.json` に収録された **100件の話題カード**からランダムにカードを引いて画面中央・サイドに温かく表示できること。
-   - さらに「✨ Gemini で今の話題を作る」ボタンから `/api/topics/generate` を呼び出し、Gemini (`gemini-2.5-flash`) によるオリジナル話題生成も行えること。
+- **「誰が常時どこにいる」という事前在室設定を廃止**：
+  - 初期状態で特定の人物（おばあちゃん等）が常時ドアの中にいる設定や、ロビーでの「ここでくつろぐ」「カメラで事前気配更新」コントロールをなくし、シンプルで直感的な設計にする。
+- **「4つのドア ＝ 4つの独立したビデオ通話ルームインスタンス」**：
+  - ロビーには4つのドア（`chanoma`: 茶の間、`engawa`: 縁側、`kitchen`: ダイニング、`hobby`: 趣味部屋）が並ぶ。
+  - 誰も入っていないドアは「空室（すぐ入れます / 0人）」。
+  - 誰かがドアを開けて入室（`enter_door`）している間だけ、そのドアインスタンスに明かりが灯り、現在その部屋に入っているメンバー（例：`1人入室中：-yoikoarmor-がくつろいでいます。`）がリアルタイム表示される。
+  - 同じドアに入った人同士で、即座に **WebRTC ビデオ通話（カメラ常時ON：実カメラ or バーチャル茶の間カメラ）** と **団らん話題カード（100選ランダム ＋ Gemini 2.5 Flash 生成）** が共有される。
+  - 退室時には、そのドアインスタンスでの団らん内容を Gemini 2.5 Flash が「安心団らんレポート」として要約・記録する。
 
 ---
 
 ## 2. REST API エンドポイント仕様 (`server/index.js`)
 
 ### `GET /api/health`
-- レスポンス:
-```json
-{
-  "ok": true,
-  "service": "tonari-door-danran",
-  "geminiConfigured": true,
-  "model": "gemini-2.5-flash",
-  "timestamp": "2026-11-07T12:00:00.000Z"
-}
-```
+- `{ ok: true, service: "tonari-door-danran", geminiConfigured: boolean, model: "gemini-2.5-flash", timestamp: string }`
 
 ### `GET /api/doors`
-- 初期状態で最低4つの温かいドアを返す：
-  1. `chanoma`（「実家の茶の間」 / 初期在室: `おばあちゃん` → `-おばあちゃん-がくつろいでいます。`）
-  2. `engawa`（「日当たりのいい縁側」 / 初期在室: `母（実家）` → `-母（実家）-がくつろいでいます。`）
-  3. `kitchen`（「夕暮れの台所・ダイニング」 / 初期在室: `kaigunn_2020` → `-kaigunn_2020-がくつろいでいます。`）
-  4. `hobby`（「みんなの趣味部屋」 / 初期在室: `yoikoarmor` → `-yoikoarmor-がくつろいでいます。`）
-- レスポンス:
+- 4つのドアインスタンスの現在のリアルタイム入室状況を返す（誰も入室していない初期状態では `participants: []`, `participantCount: 0`, `isOpen: false`）：
 ```json
 {
   "doors": [
     {
       "id": "chanoma",
+      "number": 1,
       "name": "実家の茶の間",
       "subtitle": "温かいお茶とテレビの音",
       "icon": "🍵",
       "theme": "warm-wood",
-      "occupantAccount": "おばあちゃん",
-      "mode": "relaxing",
-      "statusText": "-おばあちゃん-がくつろいでいます。",
-      "timingScore": "good",
-      "timingLabel": "◎ 声をかけるのにぴったり",
-      "aiDetail": "リビングでゆっくり過ごしています。今なら気兼ねなく話しかけられます。",
-      "participantCount": 1,
-      "participants": ["おばあちゃん"],
-      "updatedAt": "2026-11-07T12:00:00.000Z"
+      "participants": [],
+      "participantCount": 0,
+      "statusText": "空室 — ノックして団らんを始める",
+      "updatedAt": "2026-11-09T10:00:00.000Z"
     }
   ]
 }
 ```
-
-### `POST /api/doors/:id/presence`
-- リクエスト Body:
-```json
-{
-  "accountName": "yoikoarmor",
-  "mode": "relaxing",
-  "activityHint": "お茶を飲みながらひと休み中",
-  "imageBase64": "data:image/jpeg;base64,..."
-}
-```
-- 動作:
-  - `statusText` を **`-${accountName}-がくつろいでいます。`** （`mode === "busy"` の場合でも基本フォーマットまたは補足付きでアカウント名を `-name-` 形式で明示、くつろぎ時は厳密に `-${accountName}-がくつろいでいます。`）に更新。
-  - Gemini (`gemini-2.5-flash`) で `imageBase64` または `activityHint` から声かけタイミング (`timingScore`, `timingLabel`, `aiDetail`) を解析（APIキー未設定時はフォールバック解析）。
-  - WebSocket 全クライアントへ `{ "type": "doors_update", "doors": [...] }` をブロードキャスト。
+- **誰かが入室中（`participants.length > 0`）のときの `statusText`**：
+  - 1人入室中：`-${participants[0]}-がくつろいでいます。`
+  - 複数人入室中：`-${participants[0]}-ほか計${participants.length}人が団らん中`
 
 ### `GET /api/topics/random`
-- クエリ: `?category=...`（省略時は全100件からランダム1件）
-- レスポンス:
-```json
-{
-  "topic": {
-    "id": 42,
-    "category": "趣味・テレビ",
-    "topic": "最近見ているお気に入りのドラマやバラエティ番組はある？",
-    "hint": "同じ番組を見て次回感想を話す約束もできます"
-  },
-  "totalPool": 100,
-  "source": "curated-100"
-}
-```
+- `public/data/topics.json`（全100件）からランダムに1件返す。`?category=...` で絞り込み可能。
 
 ### `POST /api/topics/generate`
-- リクエスト Body:
-```json
-{
-  "accountName": "yoikoarmor",
-  "partnerAccount": "おばあちゃん",
-  "doorName": "実家の茶の間",
-  "context": "久しぶりの週末の団らん"
-}
-```
-- レスポンス:
-  - Gemini (`gemini-2.5-flash`) が生成した話題カード（未設定・エラー時は100件からランダム選択してフォールバック）：
-```json
-{
-  "topic": {
-    "id": 101,
-    "category": "Gemini おすすめ話題",
-    "topic": "...",
-    "hint": "..."
-  },
-  "source": "gemini"
-}
-```
+- Body: `{ accountName, partnerAccount, doorName, context }`
+- Gemini (`gemini-2.5-flash`) で団らん話題カードを1件生成（未設定・エラー時は100選からフォールバック）。
 
 ### `POST /api/summary` ＆ `GET /api/logs`
-- 退室時に団らんの時間・引いた話題カード・参加者から Gemini が「安心見守りサマリー」を生成して保存・返却する。
+- 退室時にそのドアインスタンスでの通話時間・参加者・引いた話題カード・メモから Gemini (`gemini-2.5-flash`) が団らんレポートを生成・保存する。
 
 ---
 
-## 3. WebSocket シグナリング・同期仕様 (`/ws`)
+## 3. WebSocket シグナリング・ルームインスタンス仕様 (`/ws`)
 
-同一ポート (`ws://localhost:8080/ws` または `wss://.../ws`) で接続：
+4つのドア（`chanoma`, `engawa`, `kitchen`, `hobby`）をそれぞれ独立したルームインスタンスとして扱う。
+
 - クライアント → サーバー:
   - `{ "type": "join_lobby", "accountName": "yoikoarmor" }`
   - `{ "type": "knock_door", "doorId": "chanoma", "accountName": "yoikoarmor" }`
@@ -141,8 +66,8 @@
   - `{ "type": "share_topic", "doorId": "chanoma", "topic": { ... }, "drawnBy": "yoikoarmor" }`
   - `{ "type": "webrtc_signal", "doorId": "chanoma", "targetId": "...", "payload": { ... } }`
 - サーバー → クライアント:
-  - `{ "type": "doors_update", "doors": [...] }`
-  - `{ "type": "knock_notification", "doorId": "chanoma", "fromAccount": "yoikoarmor" }`
-  - `{ "type": "room_state", "doorId": "chanoma", "participants": [...], "currentTopic": { ... } }`
-  - `{ "type": "topic_shared", "doorId": "chanoma", "topic": { ... }, "drawnBy": "yoikoarmor" }`
+  - `{ "type": "doors_update", "clientId": "...", "doors": [...] }`（入退室のたびに全クライアントへ各ドアの現在入室メンバー・人数を即時配信）
+  - `{ "type": "knock_notification", "doorId": "chanoma", "fromAccount": "yoikoarmor", "fromId": "..." }`
+  - `{ "type": "room_state", "doorId": "chanoma", "selfId": "...", "participants": [...], "currentTopic": { ... } }`
+  - `{ "type": "topic_shared", "doorId": "chanoma", "topic": { ... }, "drawnBy": "yoikoarmor", "fromId": "..." }`
   - `{ "type": "webrtc_signal", "doorId": "chanoma", "fromId": "...", "accountName": "...", "payload": { ... } }`
