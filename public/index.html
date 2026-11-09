@@ -112,42 +112,61 @@
       <div class="stage-col">
         <div class="participants" id="participantsBar" aria-label="この部屋にいる人"></div>
 
-        <div class="stage" id="remoteStage" aria-label="家族の映像">
-          <!-- 家族シミュレーター（1人デモ用） -->
-          <figure class="video-tile tile-family" id="simulatorTile">
-            <canvas id="simulatorCanvas" width="960" height="600" aria-label="家族シミュレーター映像"></canvas>
-            <figcaption class="name-tag" id="simulatorName">-おばあちゃん-</figcaption>
-            <div class="reaction-layer"></div>
-          </figure>
-        </div>
+        <div class="call-stage">
+          <div class="stage" id="remoteStage" aria-label="家族の映像">
+            <!-- 家族シミュレーター（1人デモ用） -->
+            <figure class="video-tile tile-family" id="simulatorTile">
+              <canvas id="simulatorCanvas" width="960" height="600" aria-label="家族シミュレーター映像"></canvas>
+              <figcaption class="name-tag" id="simulatorName">-おばあちゃん-</figcaption>
+              <div class="reaction-layer"></div>
+            </figure>
+          </div>
 
-        <div class="self-row">
-          <figure class="video-tile tile-self" id="selfTile">
-            <video id="selfVideo" autoplay playsinline muted></video>
-            <figcaption class="name-tag" id="selfName">-yoikoarmor-</figcaption>
-            <span class="tile-note" id="selfCamNote">実カメラ</span>
-            <div class="reaction-layer"></div>
-          </figure>
+          <div class="self-row">
+            <figure class="video-tile tile-self" id="selfTile">
+              <video id="selfVideo" autoplay playsinline muted></video>
+              <figcaption class="name-tag" id="selfName">-yoikoarmor-</figcaption>
+              <span class="tile-note" id="selfCamNote">実カメラ</span>
+              <div class="reaction-layer"></div>
+            </figure>
 
-          <div class="self-controls">
-            <div class="cam-switch" role="radiogroup" aria-label="カメラの種類">
-              <button type="button" class="cam-opt" id="camRealBtn" role="radio" aria-checked="true">📷 実カメラ</button>
-              <button type="button" class="cam-opt" id="camVirtualBtn" role="radio" aria-checked="false">🍵 バーチャル茶の間カメラ</button>
-            </div>
-            <p class="cam-policy">※ この部屋はお互いの顔が見えることを大切にしています。カメラを消すことはできませんが、バーチャル映像に切りかえられます。</p>
-            <div class="mini-controls">
-              <button type="button" class="btn btn-soft" id="micBtn" aria-pressed="false">🎙️ マイク ON</button>
-            </div>
-            <div class="reactions" aria-label="リアクション">
-              <button type="button" class="react" data-emoji="👋" aria-label="手をふる">👋</button>
-              <button type="button" class="react" data-emoji="😊" aria-label="にっこり">😊</button>
-              <button type="button" class="react" data-emoji="😂" aria-label="大笑い">😂</button>
-              <button type="button" class="react" data-emoji="👍" aria-label="いいね">👍</button>
-              <button type="button" class="react" data-emoji="❤️" aria-label="大好き">❤️</button>
-              <button type="button" class="react" data-emoji="🍵" aria-label="お茶どうぞ">🍵</button>
+            <div class="self-controls">
+              <div class="mini-controls">
+                <button type="button" class="btn btn-soft" id="micBtn" aria-pressed="false">🎙️ マイク ON</button>
+              </div>
+              <details class="call-settings" id="walkCallSettings" open>
+                <summary>カメラ・リアクション</summary>
+                <div class="cam-switch" role="radiogroup" aria-label="カメラの種類">
+                  <button type="button" class="cam-opt" id="camRealBtn" role="radio" aria-checked="true">📷 実カメラ</button>
+                  <button type="button" class="cam-opt" id="camVirtualBtn" role="radio" aria-checked="false">🍵 バーチャル茶の間カメラ</button>
+                </div>
+                <p class="cam-policy">※ この部屋はお互いの顔が見えることを大切にしています。カメラを消すことはできませんが、バーチャル映像に切りかえられます。</p>
+                <div class="reactions" aria-label="リアクション">
+                  <button type="button" class="react" data-emoji="👋" aria-label="手をふる">👋</button>
+                  <button type="button" class="react" data-emoji="😊" aria-label="にっこり">😊</button>
+                  <button type="button" class="react" data-emoji="😂" aria-label="大笑い">😂</button>
+                  <button type="button" class="react" data-emoji="👍" aria-label="いいね">👍</button>
+                  <button type="button" class="react" data-emoji="❤️" aria-label="大好き">❤️</button>
+                  <button type="button" class="react" data-emoji="🍵" aria-label="お茶どうぞ">🍵</button>
+                </div>
+              </details>
             </div>
           </div>
         </div>
+
+        <section class="walk-panel" id="walkPanel" aria-labelledby="walkTitle">
+          <div class="walk-heading">
+            <h3 id="walkTitle">🚶 一緒にお散歩</h3>
+            <button type="button" class="btn btn-soft" id="walkStop" hidden>散歩を終える</button>
+          </div>
+          <div class="walk-setup" id="walkSetup">
+            <label for="walkPlace">散歩先</label>
+            <select id="walkPlace" disabled></select>
+            <button type="button" class="btn btn-indigo" id="walkStart" disabled>散歩を始める</button>
+          </div>
+          <p class="walk-status" id="walkStatus" role="status" aria-atomic="true">家族とつながると散歩を始められます。</p>
+          <div class="walk-view" id="walkView" role="region" aria-label="ストリートビューの景色" hidden></div>
+        </section>
       </div>
 
       <aside class="side-col">
@@ -226,6 +245,7 @@
   <!-- ============ トースト ============ -->
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
+  <script src="walk.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

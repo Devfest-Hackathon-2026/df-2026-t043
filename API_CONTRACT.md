@@ -128,6 +128,21 @@
 ### `POST /api/summary` ＆ `GET /api/logs`
 - 退室時に団らんの時間・引いた話題カード・参加者から Gemini が「安心見守りサマリー」を生成して保存・返却する。
 
+### `GET /api/walk-config`
+
+共有散歩の行き先と、Maps JavaScript API 用のブラウザーキーを返す。キーは `GOOGLE_MAPS_BROWSER_API_KEY` から読み取り、未設定の場合は空文字を返す。公開先の HTTP リファラーと Maps JavaScript API に制限したキーを設定する。
+
+```json
+{
+  "apiKey": "",
+  "places": [
+    { "id": "asakusa", "name": "浅草", "position": { "lat": 35.711, "lng": 139.796 } },
+    { "id": "yokohama", "name": "横浜", "position": { "lat": 35.443, "lng": 139.649 } },
+    { "id": "kyoto", "name": "京都", "position": { "lat": 35.003, "lng": 135.778 } }
+  ]
+}
+```
+
 ---
 
 ## 3. WebSocket シグナリング・同期仕様 (`/ws`)
@@ -143,6 +158,32 @@
 - サーバー → クライアント:
   - `{ "type": "doors_update", "doors": [...] }`
   - `{ "type": "knock_notification", "doorId": "chanoma", "fromAccount": "yoikoarmor" }`
-  - `{ "type": "room_state", "doorId": "chanoma", "participants": [...], "currentTopic": { ... } }`
+  - `{ "type": "room_state", "doorId": "chanoma", "selfId": "...", "participants": [...], "currentTopic": { ... }, "walk": null }`
   - `{ "type": "topic_shared", "doorId": "chanoma", "topic": { ... }, "drawnBy": "yoikoarmor" }`
   - `{ "type": "webrtc_signal", "doorId": "chanoma", "fromId": "...", "accountName": "...", "payload": { ... } }`
+
+### 共有散歩
+
+- `walk_start` は入室中のメンバーが `doorId` と設定済みの `placeId` を送る。開始した接続の `selfId` が案内役の `guideId` になる。部屋ごとに同時に一つの散歩を開始できる。
+- `walk_update` は案内役が `doorId`、`sessionId`、`pano`、`position`、`pov`、`zoom` を送る。`pano` は 1〜512 文字。座標・視点・ズームは有限の数値で、緯度は −90〜90、経度は −180〜180、`heading` は 0〜360、`pitch` は −90〜90、`zoom` は 0〜5。受理した更新ごとに `revision` が 1 増える。案内役の同一セッションの更新は 100 ms に 1 件まで配信し、間隔を満たさない更新は破棄する。視点更新は毎分 900 件、通話などその他のメッセージは既存どおり毎分 300 件を上限とする。
+- `walk_stop` は同じ部屋のメンバーが `doorId` と `sessionId` を送る。案内役が退室・切断した場合も散歩は終了する。
+- 開始・更新・終了時に部屋全員へ `walk_state` を送る。途中で入室したメンバーは `room_state.walk` で最新状態を受け取る。開始時の `pano` は `null` で、終了後の `walk` は `null` になる。
+- パノラマ ID の有効性はブラウザーのセッションに依存するため、同行側では `position` からもパノラマを取得できるようにする。[Maps JavaScript API の Street View リファレンス](https://developers.google.com/maps/documentation/javascript/reference/street-view)
+- 別室からの操作と案内役以外による視点更新は `403`、使用中の部屋での再開始と古いセッションへの更新・終了は `409` を返す。
+
+```json
+{
+  "type": "walk_state",
+  "doorId": "chanoma",
+  "walk": {
+    "sessionId": "...",
+    "guideId": "...",
+    "placeId": "asakusa",
+    "pano": null,
+    "position": { "lat": 35.711, "lng": 139.796 },
+    "pov": { "heading": 0, "pitch": 0 },
+    "zoom": 1,
+    "revision": 0
+  }
+}
+```

@@ -162,6 +162,11 @@
     modalClose: $('#modalClose'),
     toasts: $('#toasts'),
   };
+  const walkPanel = window.createWalkPanel?.({
+    send,
+    getClientId: () => state.clientId,
+    loadConfig: () => api('/api/walk-config', { timeout: 5000 }),
+  });
 
   // ------------------------------------------------------------------
   // ユーティリティ
@@ -1055,6 +1060,7 @@
     });
     ws.addEventListener('close', () => {
       state.wsReady = false;
+      walkPanel?.disconnect();
       closeAllPeers();
       if (state.room) { state.room.participants = new Set([state.account]); renderParticipants(); }
       updateSimulatorVisibility();
@@ -1091,6 +1097,7 @@
       case 'error':
         console.warn('[ws] server error', msg);
         if (msg.message) toast(`⚠️ ${msg.message}`);
+        walkPanel?.error(msg.requestType);
         if (msg.requestType === 'enter_door' && state.room) resetRoom();
         break;
       case 'knock_notification':
@@ -1098,6 +1105,9 @@
         break;
       case 'room_state':
         if (state.room && msg.doorId === state.room.door.id) onRoomState(msg);
+        break;
+      case 'walk_state':
+        if (state.room && msg.doorId === state.room.door.id) walkPanel?.sync(msg.doorId, msg.walk);
         break;
       case 'topic_shared':
         if (state.room && msg.doorId === state.room.door.id && (msg.fromId ? msg.fromId !== state.clientId : msg.drawnBy !== state.account) && msg.topic) {
@@ -1132,6 +1142,7 @@
   function onRoomState(msg) {
     const names = (msg.participants || []).map(participantName).filter(Boolean);
     if (msg.selfId) state.clientId = msg.selfId;
+    walkPanel?.sync(msg.doorId, msg.walk);
     const serverIds = new Set();
     // 同じ部屋の他の参加者へ個別に挨拶（WebRTC 接続のきっかけ）
     (msg.participants || []).forEach((p) => {
@@ -1584,6 +1595,7 @@
       participants: new Set([state.account]),
       currentTopic: null,
     };
+    walkPanel?.enter(doorId);
 
     // UI 切替
     el.lobby.hidden = true;
@@ -1847,6 +1859,7 @@
   function resetRoom() {
     if (state.room) clearInterval(state.room.timer);
     state.room = null;
+    walkPanel?.leave();
     closeAllPeers();
     stopLocalMedia();
     state.simCam?.stop();
@@ -1872,6 +1885,7 @@
     stopLocalMedia();
     state.simCam?.stop();
     state.room = null;
+    walkPanel?.leave();
 
     await playDoorTransition('おじゃましました', true);
     el.room.hidden = true;

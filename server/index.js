@@ -7,6 +7,7 @@ const path = require('node:path');
 const { randomUUID, randomInt } = require('node:crypto');
 const { WebSocketServer, WebSocket } = require('ws');
 const { analyzeDoorPresence, generateDanranTopic, generateCareSummary, isGeminiConfigured, MODEL } = require('./geminiService');
+const { walkPlaces, createWalk, readWalkView } = require('./walkService');
 const topics = require('../public/data/topics.json');
 
 const app = express();
@@ -29,6 +30,7 @@ const doors = new Map(definitions.map(([id, name, subtitle, icon, theme, occupan
 }]));
 const defaultOccupants = new Map(definitions.map(([id, , , , , occupantAccount]) => [id, occupantAccount]));
 const currentTopics = new Map();
+const walks = new Map();
 const presenceVersions = new Map();
 
 function fail(message, status = 400) { const error = new Error(message); error.status = status; throw error; }
@@ -53,17 +55,54 @@ function send(client, message) {
 }
 function broadcast(message, recipients = clients.values()) { for (const client of recipients) send(client, message); }
 function broadcastDoors() { broadcast({ type: 'doors_update', doors: doorList() }); }
+function broadcastWalk(doorId) {
+  broadcast({ type: 'walk_state', doorId, walk: walks.get(doorId) || null }, members(doorId));
+}
 function roomState(doorId) {
   const peers = members(doorId).map(({ id, accountName }) => ({ id, accountName, videoEnabled: true }));
-  for (const client of members(doorId)) send(client, { type: 'room_state', doorId, selfId: client.id, participants: peers, currentTopic: currentTopics.get(doorId) || null });
+  for (const client of members(doorId)) send(client, {
+    type: 'room_state', doorId, selfId: client.id, participants: peers,
+    currentTopic: currentTopics.get(doorId) || null, walk: walks.get(doorId) || null,
+  });
 }
 function leave(client) {
   const previous = client.doorId;
   if (!previous) return;
   client.doorId = null;
   if (!members(previous).length) currentTopics.delete(previous);
+  if (walks.get(previous)?.guideId === client.id) {
+    walks.delete(previous);
+    broadcastWalk(previous);
+  }
   roomState(previous);
   broadcastDoors();
+}
+function handleWalk(client, doorId, message) {
+  if (client.doorId !== doorId) fail('入室していません。', 403);
+  const current = walks.get(doorId);
+  if (message.type === 'walk_start') {
+    if (current) fail('この部屋ではすでに散歩中です。', 409);
+    const walk = createWalk(field(message.placeId, 'placeId', 80, true), client.id);
+    if (!walk) fail('散歩先が見つかりません。', 404);
+    walks.set(doorId, walk);
+    client.lastWalkUpdateAt = -Infinity;
+  } else {
+    const sessionId = field(message.sessionId, 'sessionId', 80, true);
+    if (!current || current.sessionId !== sessionId) fail('この散歩は終了しました。', 409);
+    if (message.type === 'walk_stop') {
+      walks.delete(doorId);
+    } else {
+      if (current.guideId !== client.id) fail('案内役だけが散歩を操作できます。', 403);
+      const now = performance.now();
+      if (now - client.lastWalkUpdateAt < 100) return;
+      client.lastWalkUpdateAt = now;
+      const view = readWalkView(message);
+      if (!view) fail('散歩の位置・向き・ズームが不正です。');
+      const pano = field(message.pano, 'pano', 512, true);
+      Object.assign(current, view, { pano, revision: current.revision + 1 });
+    }
+  }
+  broadcastWalk(doorId);
 }
 function sameOrigin(origin, host) {
   if (!origin) return true; // Native clients and local CLI checks have no Origin header.
@@ -98,6 +137,7 @@ app.use('/api', (req, res, next) => {
 });
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'tonari-door-danran', geminiConfigured: isGeminiConfigured(), model: MODEL, timestamp: new Date().toISOString() }));
 app.get('/api/doors', (req, res) => res.json({ doors: doorList() }));
+app.get('/api/walk-config', (req, res) => res.json({ apiKey: process.env.GOOGLE_MAPS_BROWSER_API_KEY || '', places: walkPlaces }));
 app.post('/api/doors/:id/presence', rateLimit, asyncRoute(async (req, res) => {
   const door = getDoor(req.params.id);
   const accountName = field(req.body.accountName, 'accountName', 80, true);
@@ -195,7 +235,7 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws));
 });
 wss.on('connection', (ws) => {
-  const client = { ws, id: randomUUID(), accountName: '', doorId: null, alive: true, count: 0, window: Date.now() };
+  const client = { ws, id: randomUUID(), accountName: '', doorId: null, alive: true, count: 0, walkCount: 0, window: Date.now() };
   clients.set(client.id, client);
   send(client, { type: 'doors_update', clientId: client.id, doors: doorList() });
   ws.on('pong', () => { client.alive = true; });
@@ -204,10 +244,23 @@ wss.on('connection', (ws) => {
   ws.on('message', (data, isBinary) => {
     let message;
     try {
-      if (Date.now() - client.window >= 60_000) { client.count = 0; client.window = Date.now(); }
-      if (++client.count > 300) { ws.close(1008, 'Too many messages'); return; }
+      let invalidJSON = false;
+      if (!isBinary) {
+        try { message = JSON.parse(data.toString()); } catch { invalidJSON = true; }
+      }
+      const walk = walks.get(client.doorId);
+      const guideUpdate = message?.type === 'walk_update' && message.doorId === client.doorId
+        && walk?.guideId === client.id && message.sessionId === walk.sessionId;
+      const now = Date.now();
+      if (now - client.window >= 60_000) {
+        client.count = 0;
+        client.walkCount = 0;
+        client.window = now;
+      }
+      // The panorama budget covers normal guide motion and bounds abusive bursts.
+      if (guideUpdate ? ++client.walkCount > 900 : ++client.count > 300) { ws.close(1008, 'Too many messages'); return; }
       if (isBinary) fail('JSONテキストを送信してください。');
-      try { message = JSON.parse(data.toString()); } catch { fail('JSONの形式が不正です。'); }
+      if (invalidJSON) fail('JSONの形式が不正です。');
       if (!record(message)) fail('メッセージが不正です。');
       if (message.type === 'join_lobby') {
         const name = field(message.accountName, 'accountName', 80, true);
@@ -229,7 +282,9 @@ wss.on('connection', (ws) => {
       } else if (message.type === 'leave_door') {
         if (client.doorId && client.doorId !== door.id) fail('入室中のドアを指定してください。');
         leave(client);
-        send(client, { type: 'room_state', doorId: door.id, selfId: client.id, participants: [], currentTopic: null });
+        send(client, { type: 'room_state', doorId: door.id, selfId: client.id, participants: [], currentTopic: null, walk: null });
+      } else if (['walk_start', 'walk_update', 'walk_stop'].includes(message.type)) {
+        handleWalk(client, door.id, message);
       } else if (message.type === 'share_topic') {
         if (client.doorId !== door.id) fail('入室していません。', 403);
         const topic = topicCard(message.topic);

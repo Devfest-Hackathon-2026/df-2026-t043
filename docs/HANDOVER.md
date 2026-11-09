@@ -1,6 +1,6 @@
 # 『となりドア (Tonari Door)』— プロジェクト引継ぎ資料 (HANDOVER.md)
 
-**最終更新日時**：2026年11月9日 17:25 JST  
+**最終更新日時**：2026年11月9日 19:03 JST
 **対象**：チームメンバー（`yoikoarmor`, `kaigunn_2020` / GitHub: `suzukimain`）および後続のすべてのAIエージェント
 
 ---
@@ -118,8 +118,11 @@ gcloud run deploy tonari-door-danran \
   --min-instances 1 \
   --max-instances 1 \
   --session-affinity \
-  --set-env-vars="GEMINI_MODEL=gemini-2.5-flash,GEMINI_API_KEY=YOUR_API_KEY"
+  --set-env-vars="GEMINI_MODEL=gemini-2.5-flash" \
+  --set-secrets="GEMINI_API_KEY=gemini-api-key:latest"
 ```
+
+`gemini-api-key` は事前に Secret Manager に作成し、Cloud Run 実行サービスアカウントに読み取り権限を付与する。キーをコマンド引数やリポジトリへ直接書かない。
 
 ---
 
@@ -137,3 +140,24 @@ gcloud run deploy tonari-door-danran \
   - ロビーで気配確認（`-おばあちゃん-がくつろいでいます。`）➔ 自分の気配を灯す ➔ ノックして入室（ビデオ通話強制）➔ 話題カード抽選＆Gemini生成 ➔ 退室して安心見守りレポート表示 の流れを録画する
 - [ ] **9. ピッチ用スライドの作成（東京会場用）**
 - [ ] **10. Google Drive 提出フォルダ（「リンクを知っている全員が閲覧可」）への格納とフォーム提出**
+
+---
+
+## 7. Street View co-walk MVP（2026年11月9日追記）
+
+- 通話ルーム内のプリセットからガイドが散歩を開始する想定。現在位置・パノラマ・heading・pitch・zoom を同室者へ同期し、フォロワーは操作せず追従する。
+- 参加者の誰からでも終了できる。終了後は通話映像を維持して通話ルームに戻る。ガイドの切断でも散歩を停止する。
+- MVPに自由検索とガイド引継ぎは含めない。同期状態は既存設計と同じインメモリのため、Cloud Runは単一インスタンスで運用する。
+- `.env.example` の `GOOGLE_MAPS_BROWSER_API_KEY` はブラウザで使う専用キー。Maps JavaScript API のみを許可し、HTTP リファラーを localhost と実際の Cloud Run ホストに限定する。`GEMINI_API_KEY` は使わない。
+- Maps JavaScript API の有効化と課金設定が必要。Street View パノラマは Dynamic Street View SKU の対象で、最新の料金・無料利用上限を Google 公式の[使用量と課金](https://developers.google.com/maps/documentation/javascript/usage-and-billing)と[料金一覧](https://developers.google.com/maps/billing-and-pricing/pricing)で確認する。固定の料金や上限値は記載していない。
+- **検証状況：保留。** 実キーでの API 認証・画像表示および2台の実ブラウザ間のライブ確認は未実施。キー未設定/無効/API読込失敗時も散歩機能だけを止め、通話を継続できることを含め、README の2台実機チェックリストで確認する。
+
+## 共同街歩きの実装結果
+
+2026年11月9日、Sol がサーバー同期・フロントエンド・独立レビューを並列担当し、Luna が設定資料を整備。統合済みの npm test は全項目合格。追加の実 HTTP/WebSocket テストで部屋間の分離、案内役制限、途中参加、古いセッションの拒否、切断、送信頻度制限を確認した。Maps/DOM モックで視点同期、読込中の終了、通信失敗からの再試行、パノラマ ID 不一致時の近傍表示を確認した。
+
+Chrome ではキー未設定の散歩パネルと、バーチャル映像を保った団らん画面を確認。実際の街路画像の表示と実機2台での通話・街歩きは未確認。Maps JavaScript API を有効にした GOOGLE_MAPS_BROWSER_API_KEY を設定し、HTTP リファラーを配信URLに制限して実機確認する。
+
+変更はローカル作業ツリーに実装済み。今回の変更のコミット・push・Cloud Run 公開反映は未実施。今回のローカル確認用サーバーは http://localhost:8091 で起動。初期の場所は浅草・横浜・京都。開始した人が案内役になり、同室の誰でも散歩を終了できる。自由検索と案内役の交代は今回の範囲外。
+
+反映状況の再確認。ローカルの /api/walk-config は HTTP 200。GitHub main は a030817 のままで、東京の Cloud Run gdg-hackathon は /api/health が HTTP 200、/api/walk-config が HTTP 404。共同街歩きは公開版に未反映。

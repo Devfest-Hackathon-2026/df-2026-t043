@@ -140,7 +140,9 @@ async function runAudit() {
     assert(summaryRes.status === 200 && summaryRes.data.summary, 'POST /api/summary が安心見守りレポートを生成すること');
 
     await regressionTests(baseUrl, topics);
+    await require('./walkTest').runWalkTests(baseUrl, socketClient);
     await require('./frontendTest').runFrontendTests();
+    await require('./walkFrontendTest').runWalkFrontendTests();
 
     console.log('🎉 すべてのスモークテスト・要件監査に合格しました！');
   } finally {
