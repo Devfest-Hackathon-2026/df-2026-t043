@@ -96,27 +96,15 @@ async function runAudit() {
     assert(doorsRes.status === 200 && Array.isArray(doorsRes.data.doors) && doorsRes.data.doors.length >= 3, 'GET /api/doors が複数ドアを返すこと');
 
     const firstDoor = doorsRes.data.doors[0];
-    assert(
-      typeof firstDoor.statusText === 'string' && /^-.+-がくつろいでいます。$/.test(firstDoor.statusText),
-      `初期ドアの気配表示が「-{アカウント名}-がくつろいでいます。」形式であること (実際: "${firstDoor.statusText}")`
-    );
-
-    const presenceRes = await fetchJson(baseUrl, `/api/doors/${firstDoor.id}/presence`, {
-      method: 'POST',
-      body: { accountName: 'yoikoarmor', mode: 'relaxing', activityHint: 'お茶を飲んでひと休み中' },
-    });
-    assert(presenceRes.status === 200, 'POST /api/doors/:id/presence が正常応答すること');
-    const updatedDoor = presenceRes.data.door || (presenceRes.data.doors && presenceRes.data.doors.find((d) => d.id === firstDoor.id));
-    assert(
-      updatedDoor && updatedDoor.statusText === '-yoikoarmor-がくつろいでいます。',
-      `気配更新後の表示が「-yoikoarmor-がくつろいでいます。」になること (実際: "${updatedDoor && updatedDoor.statusText}")`
-    );
-    const doorsAfterMove = presenceRes.data.doors || (await fetchJson(baseUrl, '/api/doors')).data.doors;
-    const yoikoDoors = doorsAfterMove.filter((d) => d.occupantAccount === 'yoikoarmor');
-    assert(
-      yoikoDoors.length === 1 && yoikoDoors[0].id === firstDoor.id,
-      `別のドアに移動した際、以前のドアに重複して残らず1つのドアのみに気配が表示されること (該当ドア数: ${yoikoDoors.length})`
-    );
+    check.deepEqual(doorsRes.data.doors.map((d) => d.id), ['chanoma', 'engawa', 'kitchen', 'hobby']);
+    for (const door of doorsRes.data.doors) {
+      check.deepEqual(door.participants, []);
+      check.equal(door.participantCount, 0);
+      check.equal(door.isOpen, false);
+      check.match(door.statusText, /空室/);
+    }
+    assert(true, '初期4ドアがすべて空室であること');
+    check.equal((await fetchJson(baseUrl, '/api/doors/chanoma/presence', { method: 'POST', body: { accountName: 'test' } })).status, 404);
 
     const randTopic = await fetchJson(baseUrl, '/api/topics/random');
     assert(randTopic.status === 200 && randTopic.data.topic && randTopic.data.topic.topic, 'GET /api/topics/random がランダム話題カードを返すこと');
@@ -140,7 +128,9 @@ async function runAudit() {
     assert(summaryRes.status === 200 && summaryRes.data.summary, 'POST /api/summary が安心見守りレポートを生成すること');
 
     await regressionTests(baseUrl, topics);
+    await require('./walkTest').runWalkTests(baseUrl, socketClient);
     await require('./frontendTest').runFrontendTests();
+    await require('./walkFrontendTest').runWalkFrontendTests();
 
     console.log('🎉 すべてのスモークテスト・要件監査に合格しました！');
   } finally {
@@ -181,10 +171,7 @@ function socketClient(baseUrl) {
 
 async function regressionTests(baseUrl, topics) {
   const post = (url, body, headers) => fetchJson(baseUrl, url, { method: 'POST', body, headers });
-  for (const body of [[], { accountName: '' }, { accountName: 'a', mode: 'invalid' }, { accountName: 'a', imageBase64: 'bad!' }]) {
-    check.equal((await post('/api/doors/chanoma/presence', body)).status, 400);
-  }
-  check.equal((await post('/api/doors/missing/presence', { accountName: 'a' })).status, 404);
+  check.equal((await post('/api/summary', [])).status, 400);
   check.equal((await post('/api/topics/generate', {}, { Origin: 'https://evil.example' })).status, 403);
   check.equal((await fetchJson(baseUrl, '/api/topics/random?category=missing')).status, 404);
   for (const durationSec of [-1, '2', 86401]) check.equal((await post('/api/summary', { durationSec })).status, 400);
@@ -193,39 +180,11 @@ async function regressionTests(baseUrl, topics) {
   check.equal(multiline.data.summary.vitalityScore, null);
   check.match(multiline.data.summary.mood, /未評価/);
   check.equal((await post('/api/topics/generate', { context: 'first\nsecond' })).status, 200);
-  const resting = await post('/api/doors/chanoma/presence', { accountName: 'test', activityHint: 'お茶を飲んでひと休み中' });
-  check.equal(resting.data.door.timingScore, 'good');
-  assert(true, 'HTTP入力検証・改行メモ・未評価フォールバック・ひと休み判定');
+  assert(true, 'HTTP入力検証・改行メモ・未評価フォールバック');
 
   const service = require('./geminiService');
   process.env.GEMINI_API_KEY = 'mock-only';
   try {
-    let resolveAI;
-    let started;
-    const aiStarted = new Promise((resolve) => { started = resolve; });
-    generate = () => { started(); return new Promise((resolve) => { resolveAI = resolve; }); };
-    const pending = post('/api/doors/chanoma/presence', { accountName: 'moving', activityHint: '待機' });
-    await aiStarted;
-    await post('/api/doors/engawa/presence', { accountName: 'moving' });
-    resolveAI({ text: JSON.stringify({ timingScore: 'busy', aiDetail: '古い解析' }) });
-    await pending;
-    const after = (await fetchJson(baseUrl, '/api/doors')).data.doors;
-    check.notEqual(after.find((d) => d.id === 'chanoma').aiDetail, '古い解析');
-    check.equal(after.filter((d) => d.occupantAccount === 'moving').length, 1);
-    check.equal(after.find((d) => d.id === 'engawa').statusText, '-moving-がくつろいでいます。');
-    // Restoring demo occupants must not duplicate a demo account that has moved.
-    await post('/api/doors/hobby/presence', { accountName: 'おばあちゃん' });
-    await post('/api/doors/chanoma/presence', { accountName: 'visitor' });
-    await post('/api/doors/kitchen/presence', { accountName: 'visitor' });
-    check.equal((await fetchJson(baseUrl, '/api/doors')).data.doors.filter((d) => d.occupantAccount === 'おばあちゃん').length, 1);
-
-    let request;
-    generate = async (args) => { request = args; return { text: JSON.stringify({ timingScore: 'good', aiDetail: '短い提案' }) }; };
-    const presence = await service.analyzeDoorPresence({ accountName: '本人', mode: 'busy', imageBase64: 'data:image/png;base64,YQ==' });
-    check.equal(presence.source, 'gemini');
-    check.equal(presence.timingScore, 'busy');
-    check.equal(request.contents[0].parts[1].inlineData.mimeType, 'image/png');
-    check.ok(request.config.abortSignal);
     generate = async () => ({ text: JSON.stringify({ category: 'AI', topic: '話題', hint: 'ヒント' }) });
     check.equal((await service.generateDanranTopic()).source, 'gemini');
     generate = async () => ({ text: JSON.stringify({ title: '記録', vitalityScore: 5, mood: 'メモからの記録', highlights: ['時間', '話題'], nextTopicSuggestion: '次の話題' }) });
@@ -260,8 +219,18 @@ async function regressionTests(baseUrl, topics) {
     const [aw, bw] = await Promise.all([a.next((m) => !!m.clientId), b.next((m) => !!m.clientId), outsider.next((m) => !!m.clientId)]);
     a.send({ type: 'enter_door', doorId: 'chanoma', accountName: 'same', videoEnabled: false });
     check.equal((await a.next((m) => m.type === 'error')).requestType, 'enter_door');
-    for (const c of [a, b]) c.send({ type: 'enter_door', doorId: 'chanoma', accountName: 'same', videoEnabled: true });
+    a.send({ type: 'enter_door', doorId: 'chanoma', accountName: 'same', videoEnabled: true });
+    await a.next((m) => m.type === 'room_state');
+    let door = (await fetchJson(baseUrl, '/api/doors')).data.doors[0];
+    check.equal(door.statusText, '-same-がくつろいでいます。');
+    check.equal(door.isOpen, true);
+    check.equal(door.participantCount, 1);
+    b.send({ type: 'enter_door', doorId: 'chanoma', accountName: 'same', videoEnabled: true });
     await Promise.all([a, b].map((c) => c.next((m) => m.type === 'room_state' && m.participants.length === 2)));
+    door = (await fetchJson(baseUrl, '/api/doors')).data.doors[0];
+    check.deepEqual(door.participants, ['same', 'same']);
+    check.equal(door.statusText, '-same-ほか計2人が団らん中');
+    check.equal(door.participantCount, 2);
     a.clear(); b.clear();
     a.send({ type: 'enter_door', doorId: 'chanoma', accountName: 'renamed', videoEnabled: true });
     check.equal((await a.next((m) => m.type === 'room_state')).participants.length, 2);
@@ -272,7 +241,11 @@ async function regressionTests(baseUrl, topics) {
     a.send({ type: 'webrtc_signal', doorId: 'chanoma', targetId: bw.clientId, payload: { kind: 'hello' } });
     check.equal((await b.next((m) => m.type === 'webrtc_signal')).fromId, aw.clientId);
     b.send({ type: 'enter_door', doorId: 'engawa', accountName: 'same', videoEnabled: true });
-    await b.next((m) => m.type === 'room_state' && m.doorId === 'engawa');
+    check.equal((await b.next((m) => m.type === 'room_state' && m.doorId === 'engawa')).currentTopic, null);
+    b.send({ type: 'share_topic', doorId: 'engawa', topic: topics[1] });
+    await b.next((m) => m.type === 'topic_shared');
+    a.send({ type: 'enter_door', doorId: 'chanoma', accountName: 'renamed', videoEnabled: true });
+    check.equal((await a.next((m) => m.type === 'room_state' && m.participants.length === 1)).currentTopic.id, topics[0].id);
     a.send({ type: 'webrtc_signal', doorId: 'chanoma', targetId: bw.clientId, payload: {} });
     check.equal((await a.next((m) => m.type === 'error')).code, 403);
     b.send({ type: 'leave_door', doorId: 'chanoma' });
@@ -286,6 +259,10 @@ async function regressionTests(baseUrl, topics) {
     check.equal((await a.next((m) => m.type === 'room_state' && m.participants.length === 1)).participants[0].id, aw.clientId);
     a.send({ type: 'leave_door', doorId: 'chanoma' });
     await a.next((m) => m.type === 'room_state' && m.participants.length === 0);
+    door = (await fetchJson(baseUrl, '/api/doors')).data.doors[0];
+    check.equal(door.isOpen, false);
+    check.equal(door.participantCount, 0);
+    check.deepEqual(door.participants, []);
     a.send({ type: 'enter_door', doorId: 'chanoma', accountName: 'same', videoEnabled: true });
     check.equal((await a.next((m) => m.type === 'room_state' && m.participants.length === 1)).currentTopic, null);
     for (let i = 0; i < 7; i++) {

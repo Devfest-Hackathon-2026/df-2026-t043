@@ -1,5 +1,7 @@
 /* =====================================================================
    となりドア — フロントエンド (ドアUI・団らんルーム・話題カード・見守りノート)
+   - 4つのドア＝4つの独立したビデオ団らんルーム。事前の在室設定は持たず、
+     実際に入室しているメンバーだけをドアに表示する（API_CONTRACT.md 2026-11-09 方針）。
    - サーバー (server/index.js) が無くても、静的ファイルだけで「ひとりデモ」が動くよう
      すべての API 呼び出しにローカルフォールバックを用意しています。
    - WebRTC シグナリングは API_CONTRACT.md の `webrtc_signal` を使用。
@@ -17,36 +19,19 @@
   const VIDEO_CONSTRAINTS = { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' };
   const LS = {
     account: 'tonari.account',
-    myDoor: 'tonari.myDoor',
     logs: 'tonari.logs',
-    localDoors: 'tonari.localDoors',
   };
 
+  // 4つのドア ＝ 4つの独立したビデオ団らんルーム。
+  // 「誰が常時どこにいる」という事前在室は持たない（初期状態はすべて空室）。
   const DEFAULT_DOORS = [
-    {
-      id: 'chanoma', name: '実家の茶の間', subtitle: '温かいお茶とテレビの音', icon: '🍵', theme: 'warm-wood',
-      occupantAccount: 'おばあちゃん', mode: 'relaxing', timingScore: 'good', timingLabel: '◎ 声をかけるのにぴったり',
-      aiDetail: 'リビングでゆっくり過ごしています。今なら気兼ねなく話しかけられます。', participants: ['おばあちゃん'],
-    },
-    {
-      id: 'engawa', name: '日当たりのいい縁側', subtitle: 'ひなたぼっこと庭の草花', icon: '🌼', theme: 'matcha',
-      occupantAccount: '母（実家）', mode: 'relaxing', timingScore: 'good', timingLabel: '◎ 声をかけるのにぴったり',
-      aiDetail: '縁側でひと休みしているようです。お庭の話から始めてみましょう。', participants: ['母（実家）'],
-    },
-    {
-      id: 'kitchen', name: '夕暮れの台所・ダイニング', subtitle: 'お味噌汁の湯気と夕ごはん', icon: '🍲', theme: 'sunset',
-      occupantAccount: 'kaigunn_2020', mode: 'relaxing', timingScore: 'maybe', timingLabel: '○ 少しなら話せそう',
-      aiDetail: '夕ごはんの支度が一段落したところのようです。短めの声かけがおすすめです。', participants: ['kaigunn_2020'],
-    },
-    {
-      id: 'hobby', name: 'みんなの趣味部屋', subtitle: '編み物・将棋・アルバム', icon: '🧶', theme: 'sakura',
-      occupantAccount: 'yoikoarmor', mode: 'relaxing', timingScore: 'good', timingLabel: '◎ 声をかけるのにぴったり',
-      aiDetail: '趣味の時間を楽しんでいます。気軽にのぞいてみましょう。', participants: ['yoikoarmor'],
-    },
+    { id: 'chanoma', number: 1, name: '実家の茶の間', subtitle: '温かいお茶とテレビの音', icon: '🍵', theme: 'warm-wood', participants: [] },
+    { id: 'engawa', number: 2, name: '日当たりのいい縁側', subtitle: 'ひなたぼっこと庭の草花', icon: '🌼', theme: 'matcha', participants: [] },
+    { id: 'kitchen', number: 3, name: '夕暮れのダイニング', subtitle: 'お味噌汁の湯気と夕ごはん', icon: '🍲', theme: 'sunset', participants: [] },
+    { id: 'hobby', number: 4, name: 'みんなの趣味部屋', subtitle: '編み物・将棋・アルバム', icon: '🧶', theme: 'sakura', participants: [] },
   ];
 
   const THEME_BY_ID = { chanoma: 'indigo', engawa: 'matcha', kitchen: 'sunset', hobby: 'sakura' };
-  const TIMING_LABELS = { good: '◎ 声をかけるのにぴったり', maybe: '○ 少しなら話せそう', busy: '△ 今はそっとしておこう' };
 
   // file:// で開いた時などに topics.json が読めない場合の最小デッキ
   const EMERGENCY_TOPICS = [
@@ -56,27 +41,14 @@
     { id: 16, category: '季節・天気', topic: 'お庭やベランダの植物、今どんな様子？よかったらカメラで見せて！', hint: 'ビデオ通話ならではの『見せて』が自然に生まれます' },
   ];
 
-  const SIM_REPLIES = {
-    '食事': ['今日はね、お味噌汁にお豆腐とわかめを入れたのよ。', 'あら、お腹がすいてきちゃったわ。'],
-    '季節': ['こっちはね、朝晩が冷えるようになったわよ。', 'お庭の木がすっかり色づいたの。'],
-    '昔話': ['あの頃はねぇ、本当に楽しかったわ。', 'ふふ、懐かしいわねぇ。よく覚えてるわよ。'],
-    '暮らし': ['おかげさまで元気にしてるわよ。', '最近は朝のお散歩を続けてるの。'],
-    '趣味': ['最近はね、朝ドラが楽しみなのよ。', '編み物がもうすぐ完成しそうなの。'],
-    '家族': ['みんな元気にしてる？顔が見られて嬉しいわ。', 'この前ね、写真を整理してたのよ。'],
-    'お出かけ': ['来月ね、ご近所さんと温泉に行くのよ。', '今度帰ってきたら、あそこに行きましょうか。'],
-    'ご近所': ['お隣さんがね、柿をたくさんくれたのよ。', '商店街に新しいお店ができたの。'],
-    '知恵袋': ['それはね、焦らないのが一番よ。', 'おばあちゃんの知恵、教えてあげようか。'],
-    '遊び': ['よーし、負けないわよ！', 'ふふふ、じゃあ私からいくわね。'],
-    'default': ['あら、いい話ねぇ。そうねぇ…', 'まあ！そんなこと聞いてくれるの？嬉しいわ。', 'それはね、ちょっと長くなるわよ〜。'],
-  };
 
   // ------------------------------------------------------------------
   // 状態
   // ------------------------------------------------------------------
   const state = {
     account: loadLS(LS.account, DEFAULT_ACCOUNT) || DEFAULT_ACCOUNT,
-    myDoorId: loadLS(LS.myDoor, null),
     doors: [],
+    doorsLoaded: false,
     doorEls: new Map(),
     topics: [],
     topicFilter: 'all',
@@ -96,15 +68,13 @@
     cameraMode: 'real',
     micOn: true,
     selfCam: null,        // HomeCam (バーチャル茶の間カメラ)
-    simCam: null,         // HomeCam (家族シミュレーター)
     peers: new Map(),     // peerId -> { pc, name, serverId, tile, video, offered, pendingIce }
     audioCtx: null,
     entering: false,
     mediaStarting: false,
     switchingCamera: false,
     cameraSwitch: 0,
-    presenceRevision: 0,
-    pendingPresence: loadLS('tonari.pendingPresence', null),
+    recentKnocks: new Map(), // doorId -> 時刻（ノック通知と「明かりが灯りました」の二重通知を防ぐ）
   };
 
   // ------------------------------------------------------------------
@@ -115,25 +85,23 @@
     accountInput: $('#accountInput'),
     accountPreviewText: $('#accountPreviewText'),
     accountPreview: $('#accountPreview'),
-    myDoorSelect: $('#myDoorSelect'),
-    modeSelect: $('#modeSelect'),
-    setPresenceBtn: $('#setPresenceBtn'),
-    geminiPresenceBtn: $('#geminiPresenceBtn'),
     connStatus: $('#connStatus'),
     lobbyControls: $('#lobbyControls'),
     lobby: $('#lobby'),
     doorRow: $('#doorRow'),
+    hallwayLive: $('#hallwayLive'),
     careList: $('#careList'),
     room: $('#room'),
     roomIcon: $('#roomIcon'),
     roomName: $('#roomName'),
     roomSub: $('#roomSub'),
     roomTimer: $('#roomTimer'),
+    roomNumber: $('#roomNumber'),
+    roomCount: $('#roomCount'),
+    roomWaiting: $('#roomWaiting'),
     participantsBar: $('#participantsBar'),
     remoteStage: $('#remoteStage'),
     simulatorTile: $('#simulatorTile'),
-    simulatorCanvas: $('#simulatorCanvas'),
-    simulatorName: $('#simulatorName'),
     selfTile: $('#selfTile'),
     selfVideo: $('#selfVideo'),
     selfName: $('#selfName'),
@@ -162,6 +130,11 @@
     modalClose: $('#modalClose'),
     toasts: $('#toasts'),
   };
+  const walkPanel = window.createWalkPanel?.({
+    send,
+    getClientId: () => state.clientId,
+    loadConfig: () => api('/api/walk-config', { timeout: 5000 }),
+  });
 
   // ------------------------------------------------------------------
   // ユーティリティ
@@ -200,26 +173,19 @@
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const clampName = (s) => String(s || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 24);
   const relaxingText = (name) => `-${name}-がくつろいでいます。`;
+  const EMPTY_STATUS = '空室 — ノックして団らんを始める';
 
-  function statusTextFor(name, mode) {
-    if (!name) return 'いまは誰もいません。';
-    if (mode === 'busy') return `-${name}-は今、手が離せません。`;
-    if (mode === 'away') return `-${name}-はお出かけ中です。`;
-    return relaxingText(name);
+  /** API_CONTRACT.md §2 の statusText 規則（入室中メンバーから算出） */
+  function doorStatusText(participants) {
+    if (!participants.length) return EMPTY_STATUS;
+    if (participants.length === 1) return relaxingText(participants[0]);
+    return `-${participants[0]}-ほか計${participants.length}人が団らん中`;
   }
 
   function participantName(p) {
     if (!p) return '';
     if (typeof p === 'string') return p;
     return p.accountName || p.name || p.displayName || '';
-  }
-
-  function normTiming(score) {
-    if (typeof score === 'number') return score >= 70 ? 'good' : score >= 40 ? 'maybe' : 'busy';
-    const s = String(score || '').toLowerCase();
-    if (['good', 'great', 'high', 'best'].includes(s)) return 'good';
-    if (['maybe', 'ok', 'fair', 'medium', 'soso'].includes(s)) return 'maybe';
-    return 'busy';
   }
 
   function formatTime(sec) {
@@ -358,7 +324,6 @@
   // ------------------------------------------------------------------
   // HomeCam — Canvas で描く温かい茶の間のライブ映像
   //   kind: 'self'   … 自分用バーチャル茶の間カメラ（実カメラが無い時）
-  //         'family' … 家族シミュレーター（1人でデモする時の相手役）
   // ------------------------------------------------------------------
   class HomeCam {
     constructor(canvas, { name = '', elder = false, kind = 'self', cardigan = '#c8553d' } = {}) {
@@ -383,9 +348,6 @@
       if (this.timer) return;
       this.timer = setInterval(() => this.draw(), 1000 / 24);
       this.draw();
-      if (this.kind === 'family') {
-        this.idleTimer = setInterval(() => this.idle(), 9000);
-      }
     }
     stop() {
       clearInterval(this.timer);
@@ -622,7 +584,7 @@
       // ラベル
       ctx.textAlign = 'left';
       ctx.font = 'bold 22px "Zen Maru Gothic", sans-serif';
-      const label = this.kind === 'family' ? '● LIVE  家族シミュレーター（デモ）' : '● LIVE  🍵 バーチャル茶の間カメラ';
+      const label = '● LIVE  🍵 あなたのバーチャル茶の間カメラ';
       const lw = ctx.measureText(label).width + 28;
       ctx.fillStyle = 'rgba(47, 74, 109, 0.85)';
       this.roundRect(18, 18, lw, 38, 19); ctx.fill();
@@ -674,39 +636,51 @@
   // ------------------------------------------------------------------
   function normalizeDoor(raw, base = {}) {
     const d = { ...base, ...raw };
-    const participants = Array.isArray(d.participants) ? d.participants.map(participantName).filter(Boolean) : [];
-    const occupant = typeof d.occupantAccount === 'string' ? d.occupantAccount : participants[0] || '';
-    const mode = d.mode || (occupant ? 'relaxing' : 'empty');
-    let statusText = d.statusText;
-    // 仕様厳守：くつろぎ中は必ず「-{アカウント名}-がくつろいでいます。」
-    if (occupant && mode === 'relaxing') statusText = relaxingText(occupant);
-    if (!statusText) statusText = statusTextFor(occupant, mode);
-    const timing = normTiming(d.timingScore);
+    let participants = Array.isArray(d.participants) ? d.participants.map(participantName).filter(Boolean) : [];
+    // 旧サーバー互換：旧スキーマ（number / isOpen を持たず occupantAccount を持つ）は
+    // 事前在室者を participants に混ぜて返すので、実際の入室者だけに絞る。
+    const legacy = typeof raw.occupantAccount === 'string' && raw.number === undefined && raw.isOpen === undefined;
+    if (legacy && raw.occupantAccount) {
+      const idx = participants.indexOf(raw.occupantAccount);
+      if (idx !== -1) participants.splice(idx, 1);
+    }
+    // 新サーバーは「接続ごとに1人」と数える（同名でも別人として数える）ので重複は除かない
     return {
-      ...d,
-      occupantAccount: occupant,
-      mode,
-      statusText,
-      timingScore: timing,
-      timingLabel: d.timingLabel || TIMING_LABELS[timing],
+      id: d.id,
+      number: Number.isFinite(d.number) ? d.number : base.number,
+      name: d.name || base.name || 'ドア',
+      subtitle: d.subtitle || '',
+      icon: d.icon || '🚪',
+      theme: d.theme,
       participants,
-      participantCount: Number.isFinite(d.participantCount) ? d.participantCount : participants.length,
+      participantCount: participants.length,
+      isOpen: participants.length > 0,
+      // statusText は仕様どおり常に入室メンバーから組み立てる（旧サーバーの固定文言を出さない）
+      statusText: doorStatusText(participants),
+      updatedAt: d.updatedAt,
     };
-  }
-
-  function applyLocalOverrides(doors) {
-    // サーバーに届かなかった在室設定（オフライン時）をローカルで反映
-    if (state.serverOnline) return doors;
-    const overrides = loadLS(LS.localDoors, {});
-    return doors.map((d) => (overrides[d.id] ? normalizeDoor(overrides[d.id], d) : d));
   }
 
   function setDoors(list) {
     const baseById = new Map(DEFAULT_DOORS.map((d) => [d.id, d]));
-    state.doors = applyLocalOverrides(list.map((d) => normalizeDoor(d, baseById.get(d.id))));
+    const prev = new Map(state.doors.map((d) => [d.id, d.participants]));
+    state.doors = list.map((d, i) => normalizeDoor(d, baseById.get(d.id) || { number: i + 1 }));
+    // 廊下にいる間、誰かがドアに入ったら（明かりが灯ったら）そっとお知らせ
+    if (state.doorsLoaded && !state.room && !state.entering) {
+      for (const door of state.doors) {
+        const before = prev.get(door.id) || [];
+        const arrived = door.participants.filter((p) => !before.includes(p) && p !== state.account);
+        const knockedJustNow = Date.now() - (state.recentKnocks.get(door.id) || 0) < 8000;
+        if (arrived.length && !knockedJustNow) {
+          toast(`🏮 「${door.name}」に明かりが灯りました：${relaxingText(arrived[0])}`, {
+            action: { label: '🚪 ノックして入る', onClick: () => knockDoor(door.id) },
+            duration: 7000,
+          });
+        }
+      }
+    }
+    state.doorsLoaded = true;
     renderDoors();
-    renderDoorSelect();
-    // ルーム内にいる場合はドア情報を更新
     if (state.room) {
       const updated = state.doors.find((d) => d.id === state.room.door.id);
       if (updated) state.room.door = updated;
@@ -727,12 +701,6 @@
     }
   }
 
-  function renderDoorSelect() {
-    const current = el.myDoorSelect.value || state.myDoorId || 'hobby';
-    el.myDoorSelect.replaceChildren(...state.doors.map((d) => h('option', { value: d.id }, `${d.icon || '🚪'} ${d.name}`)));
-    if (state.doors.some((d) => d.id === current)) el.myDoorSelect.value = current;
-  }
-
   function renderDoors() {
     const seen = new Set();
     state.doors.forEach((door, idx) => {
@@ -748,6 +716,12 @@
     for (const [id, unit] of state.doorEls) {
       if (!seen.has(id)) { unit.remove(); state.doorEls.delete(id); }
     }
+    const open = state.doors.filter((d) => d.isOpen);
+    const people = open.reduce((n, d) => n + d.participantCount, 0);
+    el.hallwayLive.textContent = open.length
+      ? `🏮 いま明かりが灯っているドア：${open.length} / ${state.doors.length}　👥 合計 ${people}人が団らん中`
+      : '🌙 いまは全部のドアが空室です。どこかのドアに入って、家族を待ってみましょう。';
+    el.hallwayLive.classList.toggle('is-live', open.length > 0);
   }
 
   function createDoorEl(door) {
@@ -755,20 +729,21 @@
     unit.innerHTML = `
       <div class="door-noren" aria-hidden="true"><span></span><span></span><span></span><b class="door-noren-label"></b></div>
       <div class="door-frame">
+        <span class="door-number" aria-hidden="true"></span>
         <div class="door-leaf">
           <div class="door-glass" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="door-plate"><p class="door-status"></p></div>
           <div class="door-knob" aria-hidden="true"></div>
         </div>
+        <span class="door-count" aria-hidden="true"></span>
       </div>
       <div class="door-floor-glow" aria-hidden="true"></div>
       <div class="door-info">
         <h3 class="door-name"></h3>
         <p class="door-subtitle"></p>
-        <span class="timing"></span>
-        <p class="ai-detail"></p>
-        <p class="door-people"></p>
-        <button type="button" class="btn btn-lamp knock-btn">✊ コンコン ノックして入る</button>
+        <span class="occupancy"></span>
+        <ul class="door-people" aria-label="入室中のメンバー"></ul>
+        <button type="button" class="btn btn-lamp knock-btn"></button>
       </div>`;
     unit.querySelector('.knock-btn').addEventListener('click', () => knockDoor(unit.dataset.id));
     unit.querySelector('.door-frame').addEventListener('click', () => knockDoor(unit.dataset.id));
@@ -777,8 +752,9 @@
 
   function updateDoorEl(unit, door) {
     const statusEl = unit.querySelector('.door-status');
-    const changed = statusEl.textContent && statusEl.textContent !== door.statusText;
-    statusEl.textContent = door.statusText;
+    const plate = door.isOpen ? door.statusText : '空室';
+    const changed = statusEl.textContent && statusEl.textContent !== plate;
+    statusEl.textContent = plate;
     if (changed) {
       statusEl.classList.remove('is-updated');
       void statusEl.offsetWidth;
@@ -786,233 +762,34 @@
     }
     unit.dataset.theme = THEME_BY_ID[door.id] || (door.theme === 'warm-wood' ? 'indigo' : door.theme) || 'indigo';
     unit.querySelector('.door-noren-label').textContent = String(door.name || '').split(/[・（(]/)[0].slice(0, 8);
-    unit.querySelector('.door-name').textContent = `${door.icon || '🚪'} ${door.name}`;
-    unit.querySelector('.door-subtitle').textContent = door.subtitle || '';
+    unit.querySelector('.door-number').textContent = door.number ? `ドア ${door.number}` : '';
+    unit.querySelector('.door-name').textContent = `${door.icon} ${door.name}`;
+    unit.querySelector('.door-subtitle').textContent = door.subtitle;
 
-    const timing = unit.querySelector('.timing');
-    timing.className = `timing t-${door.timingScore}`;
-    timing.textContent = door.occupantAccount ? door.timingLabel : '… だれもいません';
+    const n = door.participantCount;
+    unit.querySelector('.door-count').textContent = n ? `👥 ${n}` : '';
+    const occ = unit.querySelector('.occupancy');
+    occ.className = `occupancy ${n ? 'is-open' : 'is-vacant'}`;
+    occ.textContent = n ? `👥 ${n}人が在室中` : '○ 空室（すぐ入れます / 0人）';
 
-    const detail = unit.querySelector('.ai-detail');
-    detail.replaceChildren(
-      h('span', { class: 'ai-src' }, door.source === 'gemini' ? '✨Gemini' : '🏮気配'),
-      door.aiDetail || (door.occupantAccount ? '' : 'ノックして中で待っていると、家族が来てくれるかもしれません。'),
+    unit.querySelector('.door-people').replaceChildren(
+      ...door.participants.map((p) => h('li', { class: p === state.account ? 'is-me' : null },
+        `${relaxingText(p)}${p === state.account ? '（あなた）' : ''}`)),
     );
 
-    const people = door.participants.filter((p) => p !== door.occupantAccount);
-    unit.querySelector('.door-people').textContent = people.length
-      ? `中に ${door.participants.length} 人：${door.participants.map((p) => `-${p}-`).join(' ')}`
-      : '';
+    unit.classList.toggle('is-lit', n > 0);
+    unit.classList.toggle('is-empty', n === 0);
 
-    const lit = !!door.occupantAccount && door.mode === 'relaxing';
-    const dim = !!door.occupantAccount && !lit;
-    unit.classList.toggle('is-lit', lit);
-    unit.classList.toggle('is-dim', dim);
-    unit.classList.toggle('is-empty', !door.occupantAccount);
-
-    const isMine = door.occupantAccount && door.occupantAccount === state.account;
-    let badge = unit.querySelector('.door-mine-badge');
-    if (isMine && !badge) {
-      badge = h('span', { class: 'door-mine-badge' }, 'あなたの気配');
-      unit.querySelector('.door-frame').append(badge);
-    } else if (!isMine && badge) badge.remove();
-
-    unit.querySelector('.knock-btn').setAttribute('aria-label', `${door.name}のドアをノックして入る。${door.statusText}`);
+    const btn = unit.querySelector('.knock-btn');
+    btn.textContent = n ? `✊ コンコン ノックして入る（${n + 1}人目）` : '✊ ノックして入る（1人目として待つ）';
+    btn.setAttribute('aria-label', `ドア${door.number || ''}「${door.name}」をノックして入る。${door.isOpen ? door.statusText : '空室です'}`);
   }
 
   // ------------------------------------------------------------------
-  // 自分の気配（プレゼンス）
+  // アカウント名プレビュー
   // ------------------------------------------------------------------
   function updateAccountPreview() {
-    const mode = el.modeSelect.value;
-    el.accountPreviewText.textContent = statusTextFor(state.account, mode);
-  }
-
-  function localAnalyze(hint = '', mode = 'relaxing') {
-    if (mode !== 'relaxing') {
-      return { timingScore: 'busy', aiDetail: mode === 'away' ? 'お出かけ中のようです。戻ってきたらまた声をかけましょう。' : '手が離せないようです。少し時間をおいてみましょう。' };
-    }
-    if (/寝|眠|うとうと|お昼寝|風呂|入浴/.test(hint)) return { timingScore: 'busy', aiDetail: '今はそっとしておいて、あとで声をかけましょう。' };
-    if (/料理|掃除|洗濯|電話|支度|忙/.test(hint)) return { timingScore: 'maybe', aiDetail: '家事の合間のようです。短めの声かけならちょうどよさそうです。' };
-    return { timingScore: 'good', aiDetail: 'ゆったり過ごしているようです。今なら気軽に声をかけられます。' };
-  }
-
-  async function setPresence({ doorId, mode = 'relaxing', activityHint = '', imageBase64 } = {}) {
-    const door = state.doors.find((d) => d.id === doorId);
-    if (!door) return null;
-    const name = state.account;
-    const revision = ++state.presenceRevision;
-    state.pendingPresence = { doorId, mode, accountName: name, activityHint };
-    saveLS('tonari.pendingPresence', state.pendingPresence);
-
-    // 1) 楽観的に即反映（仕様：入力したアカウント名で即座に切替）
-    const local = localAnalyze(activityHint, mode);
-    // 他のドアから自分の気配を外す
-    state.doors = state.doors.map((d) => {
-      if (d.id !== doorId && d.occupantAccount === name) {
-        const rest = d.participants.filter((p) => p !== name);
-        return normalizeDoor({ ...d, occupantAccount: rest[0] || '', participants: rest, participantCount: undefined, mode: rest[0] ? 'relaxing' : 'empty', statusText: '' });
-      }
-      return d;
-    });
-    const optimistic = normalizeDoor({
-      ...door,
-      occupantAccount: name,
-      mode,
-      statusText: statusTextFor(name, mode),
-      timingScore: local.timingScore,
-      timingLabel: TIMING_LABELS[local.timingScore],
-      aiDetail: activityHint ? `${activityHint}` : local.aiDetail,
-      participants: [...(mode === 'away' ? [] : [name]), ...door.participants.filter((p) => p !== name && p !== door.occupantAccount)],
-      participantCount: undefined,
-      source: 'local',
-    });
-    state.doors = state.doors.map((d) => (d.id === doorId ? optimistic : d));
-    state.myDoorId = doorId;
-    saveLS(LS.myDoor, doorId);
-    renderDoors();
-
-    // 2) サーバー (Gemini) へ
-    try {
-      const res = await api(`/api/doors/${encodeURIComponent(doorId)}/presence`, {
-        method: 'POST',
-        body: { accountName: name, mode, activityHint, imageBase64 },
-        timeout: 20000,
-      });
-      if (revision !== state.presenceRevision) return null;
-      state.pendingPresence = null;
-      saveLS('tonari.pendingPresence', null);
-      saveLS(LS.localDoors, {});
-      state.serverOnline = true;
-      if (Array.isArray(res.doors)) {
-        setDoors(res.doors);
-      } else {
-        const updatedRaw = res.door || (res.id ? res : null);
-        const analysis = res.analysis || res;
-        const merged = normalizeDoor({
-          ...optimistic,
-          ...(updatedRaw || {}),
-          ...(analysis.timingScore ? { timingScore: analysis.timingScore, timingLabel: analysis.timingLabel, aiDetail: analysis.aiDetail, source: analysis.source } : {}),
-        });
-        state.doors = state.doors.map((d) => (d.id === doorId ? merged : d));
-        renderDoors();
-      }
-      return state.doors.find((d) => d.id === doorId);
-    } catch {
-      // オフライン：ローカルに保存しておく
-      if (revision !== state.presenceRevision) return null;
-      const overrides = Object.fromEntries(state.doors.map((d) => [d.id, d]));
-      saveLS(LS.localDoors, overrides);
-      return optimistic;
-    }
-  }
-
-  async function onSetPresence() {
-    const doorId = el.myDoorSelect.value;
-    const mode = el.modeSelect.value;
-    setBusy(el.setPresenceBtn, true, '🏮 灯しています…');
-    const door = await setPresence({ doorId, mode });
-    setBusy(el.setPresenceBtn, false);
-    if (door) {
-      toast(`🏮 「${door.name}」のドアに明かりを灯しました：${door.statusText}`);
-      const unit = state.doorEls.get(doorId);
-      unit?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }
-
-  // 「📸 カメラ/状況からGeminiで声かけタイミングを更新」
-  function openGeminiPresence() {
-    let closed = false;
-    let stream = null;
-    let fallbackCam = null;
-    const preview = h('div', { class: 'cam-preview' });
-    const video = h('video', { autoplay: true, playsinline: true, muted: true });
-    video.muted = true;
-    preview.append(video);
-
-    const doorSel = h('select', { id: 'gpDoor' }, ...state.doors.map((d) => h('option', { value: d.id }, `${d.icon || '🚪'} ${d.name}`)));
-    doorSel.value = el.myDoorSelect.value;
-    const modeSel = h('select', { id: 'gpMode' },
-      h('option', { value: 'relaxing' }, '🛋️ くつろぎ中'),
-      h('option', { value: 'busy' }, '🍳 ちょっと手が離せない'),
-      h('option', { value: 'away' }, '🚶 お出かけ中'));
-    modeSel.value = el.modeSelect.value;
-    const hint = h('input', { type: 'text', id: 'gpHint', maxlength: '120', placeholder: '例：お茶を飲みながらひと休み中' });
-    const chips = h('div', { class: 'memo-chips' },
-      ...['お茶を飲みながらひと休み中', 'テレビを見て笑っている', '夕ごはんの支度中', '少しうとうとしている', '編み物をしている'].map((t) =>
-        h('button', { type: 'button', class: 'chip', onclick: () => { hint.value = t; } }, t)));
-    const useCam = h('input', { type: 'checkbox', id: 'gpUseCam', checked: true });
-    const result = h('div', { class: 'result-box', hidden: true });
-    const runBtn = h('button', { type: 'button', class: 'btn btn-indigo' }, '✨ Geminiで声かけタイミングを判定');
-    const doneBtn = h('button', { type: 'button', class: 'btn btn-soft', onclick: closeModal }, '閉じる');
-
-    (async () => {
-      try {
-        stream = await getMedia({ video: VIDEO_CONSTRAINTS, audio: false });
-        if (closed) { stream.getTracks().forEach((tr) => tr.stop()); return; }
-        video.srcObject = stream;
-      } catch {
-        if (closed) return;
-        // カメラが無い場合はバーチャル茶の間の映像で代用
-        const canvas = h('canvas', { width: '960', height: '600' });
-        fallbackCam = new HomeCam(canvas, { name: state.account, kind: 'self' });
-        fallbackCam.start();
-        video.remove();
-        preview.append(canvas);
-        preview.append(h('span', { class: 'tile-note' }, 'カメラが使えないためバーチャル映像で代用'));
-      }
-    })();
-
-    runBtn.addEventListener('click', async () => {
-      let imageBase64;
-      if (useCam.checked) imageBase64 = captureFrame(stream ? video : preview.querySelector('canvas'));
-      setBusy(runBtn, true, '🍵 Geminiが気配を読み取っています…');
-      const door = await setPresence({ doorId: doorSel.value, mode: modeSel.value, activityHint: hint.value.trim(), imageBase64 });
-      setBusy(runBtn, false);
-      el.myDoorSelect.value = doorSel.value;
-      el.modeSelect.value = modeSel.value;
-      updateAccountPreview();
-      if (!door) return;
-      result.hidden = false;
-      result.replaceChildren(
-        h('p', { class: 'result-status' }, door.statusText),
-        h('p', {}, h('span', { class: `timing t-${door.timingScore}` }, door.timingLabel)),
-        h('p', {}, door.aiDetail || ''),
-        h('p', {}, h('span', { class: `source-tag ${door.source === 'gemini' ? '' : 'is-fallback'}` },
-          door.source === 'gemini' ? '✨ Gemini 2.5 Flash で解析' : '🏮 かんたん判定（Gemini未接続）')),
-      );
-    });
-
-    openModal('📸 Geminiで声かけタイミングを更新', [
-      preview,
-      h('p', { class: 'privacy-note' }, '🔒 映像そのものは家族に送られません。Gemini が「くつろいでいる」「手が離せない」といった気配のひとことに置きかえて、ドアにだけ表示します。'),
-      h('label', { for: 'gpDoor' }, 'どのドアの気配を更新しますか？'), doorSel,
-      h('label', { for: 'gpMode' }, 'いまの様子'), modeSel,
-      h('label', { for: 'gpHint' }, '状況のひとこと（任意）'), hint, chips,
-      h('label', { for: 'gpUseCam' }, useCam, ' カメラの1枚を Gemini の解析に使う'),
-      h('div', { class: 'row' }, runBtn, doneBtn),
-      result,
-    ], {
-      onClose: () => {
-        closed = true;
-        stream?.getTracks().forEach((tr) => tr.stop());
-        fallbackCam?.stop();
-      },
-    });
-  }
-
-  function captureFrame(source, maxW = 640) {
-    try {
-      const sw = source.videoWidth || source.width;
-      const sh = source.videoHeight || source.height;
-      if (!sw || !sh) return undefined;
-      const scale = Math.min(1, maxW / sw);
-      const c = document.createElement('canvas');
-      c.width = Math.round(sw * scale);
-      c.height = Math.round(sh * scale);
-      c.getContext('2d').drawImage(source, 0, 0, c.width, c.height);
-      return c.toDataURL('image/jpeg', 0.72);
-    } catch { return undefined; }
+    el.accountPreviewText.textContent = relaxingText(state.account);
   }
 
   // ------------------------------------------------------------------
@@ -1040,7 +817,6 @@
       state.serverOnline = true;
       updateConn();
       send({ type: 'join_lobby', accountName: state.account });
-      if (state.pendingPresence?.accountName === state.account) setPresence(state.pendingPresence);
       if (state.room) {
         // 再接続時：サーバー側の接続IDが変わるので古いピアは張り直す
         closeAllPeers();
@@ -1055,8 +831,9 @@
     });
     ws.addEventListener('close', () => {
       state.wsReady = false;
+      walkPanel?.disconnect();
       closeAllPeers();
-      if (state.room) { state.room.participants = new Set([state.account]); renderParticipants(); }
+      if (state.room) { state.room.roster = [state.account]; renderParticipants(); }
       updateSimulatorVisibility();
       updateConn();
       scheduleReconnect();
@@ -1091,6 +868,7 @@
       case 'error':
         console.warn('[ws] server error', msg);
         if (msg.message) toast(`⚠️ ${msg.message}`);
+        walkPanel?.error(msg.requestType);
         if (msg.requestType === 'enter_door' && state.room) resetRoom();
         break;
       case 'knock_notification':
@@ -1099,8 +877,11 @@
       case 'room_state':
         if (state.room && msg.doorId === state.room.door.id) onRoomState(msg);
         break;
+      case 'walk_state':
+        if (state.room && msg.doorId === state.room.door.id) walkPanel?.sync(msg.doorId, msg.walk);
+        break;
       case 'topic_shared':
-        if (state.room && msg.doorId === state.room.door.id && (msg.fromId ? msg.fromId !== state.clientId : msg.drawnBy !== state.account) && msg.topic) {
+        if (state.room && msg.doorId === state.room.door.id && msg.topic && msg.topic.id !== state.room.currentTopic?.id) {
           showTopic(msg.topic, { source: 'shared', by: msg.drawnBy });
         }
         break;
@@ -1115,6 +896,7 @@
   function onKnockNotification(msg) {
     if (!msg.fromAccount || (msg.fromId ? msg.fromId === state.clientId : msg.fromAccount === state.account)) return;
     const door = state.doors.find((d) => d.id === msg.doorId);
+    state.recentKnocks.set(msg.doorId, Date.now());
     playKnock(2);
     const unit = state.doorEls.get(msg.doorId);
     if (unit) knockAnim(unit);
@@ -1132,6 +914,7 @@
   function onRoomState(msg) {
     const names = (msg.participants || []).map(participantName).filter(Boolean);
     if (msg.selfId) state.clientId = msg.selfId;
+    walkPanel?.sync(msg.doorId, msg.walk);
     const serverIds = new Set();
     // 同じ部屋の他の参加者へ個別に挨拶（WebRTC 接続のきっかけ）
     (msg.participants || []).forEach((p) => {
@@ -1147,9 +930,10 @@
         if (peer.serverId && !serverIds.has(peer.serverId)) removePeer(pid);
       }
     }
-    state.room.participants = new Set([state.account, ...names, ...[...state.peers.values()].map((p) => p.name)]);
+    state.room.roster = names;
+    names.forEach((name) => state.room.participants.add(name));
     renderParticipants();
-    if (msg.currentTopic && !state.room.currentTopic) showTopic(msg.currentTopic, { source: 'shared', by: '家族', silent: true });
+    if (msg.currentTopic && msg.currentTopic.id !== state.room.currentTopic?.id) showTopic(msg.currentTopic, { source: 'shared', by: '家族', silent: true });
   }
 
   // ------------------------------------------------------------------
@@ -1300,7 +1084,6 @@
     try { peer.pc.close(); } catch { /* noop */ }
     peer.tile.remove();
     if (state.room) {
-      state.room.participants.delete(peer.name);
       renderParticipants();
       toast(`👋 -${peer.name}-が部屋を出ました`);
     }
@@ -1314,14 +1097,13 @@
       try { peer.pc.close(); } catch { /* noop */ }
       peer.tile.remove();
     }
+    updateSimulatorVisibility();
   }
 
   function updateSimulatorVisibility() {
     const hasPeers = state.peers.size > 0;
     el.simulatorTile.hidden = hasPeers;
-    if (state.simCam) {
-      if (hasPeers) state.simCam.stop(); else if (state.room) state.simCam.start();
-    }
+    updateWaiting();
   }
 
   // ------------------------------------------------------------------
@@ -1514,7 +1296,7 @@
     const door = state.doors.find((d) => d.id === doorId);
     if (!door) return;
 
-    const doKnock = async () => {
+    (async () => {
       state.entering = true;
       const unit = state.doorEls.get(doorId);
       playKnock(2);
@@ -1525,19 +1307,7 @@
       await sleep(350);
       await enterRoom(doorId);
       if (unit) unit.classList.remove('is-opening');
-    };
-
-    if (door.occupantAccount && door.occupantAccount !== state.account && door.timingScore === 'busy') {
-      openModal('いまは、そっとしておく？', [
-        h('p', { class: 'result-status' }, door.statusText),
-        h('p', {}, door.aiDetail || '今は手が離せないようです。'),
-        h('div', { class: 'row' },
-          h('button', { type: 'button', class: 'btn btn-soft', onclick: closeModal }, '🍵 あとにする'),
-          h('button', { type: 'button', class: 'btn btn-lamp', onclick: () => { closeModal(); doKnock(); } }, '✊ それでもノックする')),
-      ]);
-      return;
-    }
-    doKnock();
+    })();
   }
 
   async function playDoorTransition(caption, closing = false) {
@@ -1581,9 +1351,11 @@
       startedAt: Date.now(),
       timer: null,
       topicsUsed: [],
-      participants: new Set([state.account]),
+      participants: new Set([state.account]), // Session history for the report
+      roster: [state.account], // Current connections; duplicate names are intentional
       currentTopic: null,
     };
+    walkPanel?.enter(doorId);
 
     // UI 切替
     el.lobby.hidden = true;
@@ -1591,6 +1363,7 @@
     el.accountPreview.hidden = true;
     el.room.hidden = false;
     el.roomIcon.textContent = door.icon || '🚪';
+    el.roomNumber.textContent = door.number ? `ドア ${door.number}` : '';
     el.roomName.textContent = door.name;
     el.roomSub.textContent = door.subtitle || '';
     el.memoInput.value = '';
@@ -1604,21 +1377,7 @@
     state.mediaStarting = false;
     const roomSession = state.room;
 
-    // 家族シミュレーター（1人でも寂しくないように）
-    const simName = door.occupantAccount && door.occupantAccount !== state.account
-      ? door.occupantAccount
-      : (state.doors.find((d) => d.occupantAccount && d.occupantAccount !== state.account)?.occupantAccount || 'おばあちゃん');
-    el.simulatorName.textContent = `-${simName}-`;
-    if (!state.simCam) state.simCam = new HomeCam(el.simulatorCanvas, { kind: 'family', elder: true, cardigan: '#a35866' });
-    state.simCam.name = simName;
-    state.simCam.elder = !/kaigunn|yoiko|_\d|[a-z]{4,}/i.test(simName) || /おばあ|おじい|祖|母|父/.test(simName);
     updateSimulatorVisibility();
-    state.simCam.start();
-    setTimeout(() => {
-      if (state.room !== roomSession) return;
-      state.simCam.wave();
-      state.simCam.say('あら、いらっしゃい！顔が見られて嬉しいわ。');
-    }, 600);
 
     renderParticipants();
     state.room.timer = setInterval(() => {
@@ -1638,11 +1397,25 @@
 
   function renderParticipants() {
     if (!state.room) return;
-    const names = [...state.room.participants].filter(Boolean);
+    const names = (state.room.roster || [state.account]).filter(Boolean);
     el.participantsBar.replaceChildren(
-      h('span', { class: 'participant' }, '🏠 いまこの部屋に：'),
+      h('span', { class: 'participant participant-label' }, `👥 ${names.length}人が在室中：`),
       ...names.map((n) => h('span', { class: `participant ${n === state.account ? 'is-me' : ''}` }, `-${n}-${n === state.account ? '（あなた）' : ''}`)),
     );
+    el.roomCount.textContent = `👥 ${names.length}人`;
+    updateWaiting();
+  }
+
+  /** 部屋に自分1人のときは「家族を待っています」表示 */
+  function updateWaiting() {
+    if (!state.room) return;
+    const alone = state.peers.size === 0 && (state.room.roster || [state.account]).length <= 1;
+    el.roomWaiting.hidden = !alone;
+    if (alone) {
+      el.roomWaiting.textContent = state.wsReady
+        ? `🕯 いまはあなた1人です。ドアに「${relaxingText(state.account)}」と明かりが灯っています。家族がノックして入ってくるのを待ちましょう。`
+        : '🕯 サーバーへの接続を待っています。接続後、同じドアに入った家族とビデオでつながります。';
+    }
   }
 
   function floatEmoji(tile, emoji) {
@@ -1659,20 +1432,6 @@
     floatEmoji(el.selfTile, emoji);
     state.selfCam?.react(emoji);
     sendSignal({ kind: 'reaction', emoji });
-    if (state.peers.size === 0 && state.simCam) {
-      const sim = state.simCam;
-      setTimeout(() => {
-        switch (emoji) {
-          case '👋': sim.wave(); sim.say('はーい、ちゃんと見えてるわよ〜'); break;
-          case '😊': sim.laugh(); sim.react('😊'); break;
-          case '😂': sim.laugh(); sim.react('😂'); sim.say('あはは、おかしいわねぇ！'); break;
-          case '👍': sim.nod(); sim.say('うんうん、そうよね！'); break;
-          case '❤️': sim.react('❤️'); sim.say('ありがとうね。嬉しいわ。'); break;
-          case '🍵': sim.sip(); sim.say('いただきます。あったかいわねぇ。'); break;
-          default: sim.react(emoji);
-        }
-      }, 700);
-    }
   }
 
   // ------------------------------------------------------------------
@@ -1698,8 +1457,8 @@
     }, label);
     el.categoryChips.replaceChildren(mk('all', `すべて（${state.topics.length}）`), ...cats.map((c) => mk(c, c)));
     el.drawTopicBtn.textContent = state.topicFilter === 'all'
-      ? `🎲 話題カードをランダムに引く（全${state.topics.length}件）`
-      : `🎲「${state.topicFilter}」から引く`;
+      ? `📇 話題カード${state.topics.length}選から引く`
+      : `📇「${state.topicFilter}」から引く`;
   }
 
   function localRandomTopic() {
@@ -1749,7 +1508,7 @@
     if (!state.room) return;
     const room = state.room;
     setBusy(el.geminiTopicBtn, true, '✨ Gemini が話題を考えています…');
-    const others = [...state.room.participants].filter((n) => n !== state.account);
+    const others = [...(state.room.roster || [state.account])].filter((n) => n !== state.account);
     let topic = null;
     let source = 'gemini';
     try {
@@ -1758,7 +1517,7 @@
         timeout: 20000,
         body: {
           accountName: state.account,
-          partnerAccount: others[0] || state.room.door.occupantAccount || 'おばあちゃん',
+          partnerAccount: others[0] || '家族',
           doorName: state.room.door.name,
           context: roomContext(),
         },
@@ -1830,15 +1589,6 @@
     el.topicHistory.prepend(li);
     el.historyCount.textContent = String(state.room.topicsUsed.length);
 
-    // 家族シミュレーターのお返事
-    if (state.peers.size === 0 && state.simCam && source !== 'shared') {
-      const key = Object.keys(SIM_REPLIES).find((k) => t.category.includes(k)) || 'default';
-      setTimeout(() => {
-        if (!state.room) return;
-        state.simCam.nod();
-        state.simCam.say(pick(SIM_REPLIES[key]));
-      }, 1600);
-    }
   }
 
   // ------------------------------------------------------------------
@@ -1847,9 +1597,9 @@
   function resetRoom() {
     if (state.room) clearInterval(state.room.timer);
     state.room = null;
+    walkPanel?.leave();
     closeAllPeers();
     stopLocalMedia();
-    state.simCam?.stop();
     el.room.hidden = true;
     el.lobby.hidden = false;
     el.lobbyControls.hidden = false;
@@ -1862,7 +1612,7 @@
     const room = state.room;
     const durationSec = Math.min(86400, Math.max(0, Math.round((Date.now() - room.startedAt) / 1000)));
     const notes = el.memoInput.value.trim();
-    const participants = [...room.participants].filter(Boolean);
+    const participants = [...room.participants].filter(Boolean).slice(-20);
 
     setBusy(el.leaveBtn, true, '🚪 ドアを閉めています…');
     sendSignal({ kind: 'bye' });
@@ -1870,8 +1620,8 @@
     clearInterval(room.timer);
     closeAllPeers();
     stopLocalMedia();
-    state.simCam?.stop();
     state.room = null;
+    walkPanel?.leave();
 
     await playDoorTransition('おじゃましました', true);
     el.room.hidden = true;
@@ -2035,19 +1785,13 @@
     accountTimer = setTimeout(() => {
       saveLS(LS.account, name);
       if (!state.room && !state.entering) send({ type: 'join_lobby', accountName: name });
-      // すでに自分のドアに明かりを灯していれば、新しい名前で即座に更新
-      const mine = state.myDoorId && state.doors.find((d) => d.id === state.myDoorId);
-      if (mine && mine.occupantAccount) setPresence({ doorId: state.myDoorId, mode: el.modeSelect.value });
-      else renderDoors();
+      renderDoors();
     }, 450);
   });
   el.accountInput.addEventListener('blur', () => {
     if (!clampName(el.accountInput.value)) el.accountInput.value = state.account;
   });
-  el.accountInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') onSetPresence(); });
-  el.modeSelect.addEventListener('change', updateAccountPreview);
-  el.setPresenceBtn.addEventListener('click', onSetPresence);
-  el.geminiPresenceBtn.addEventListener('click', openGeminiPresence);
+  el.accountInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.accountInput.blur(); });
 
   el.camRealBtn.addEventListener('click', () => switchCamera('real'));
   el.camVirtualBtn.addEventListener('click', () => switchCamera('virtual'));
@@ -2083,8 +1827,6 @@
     updateAccountPreview();
     updateConn();
     await Promise.all([loadDoors(), loadTopics()]);
-    if (state.myDoorId && state.doors.some((d) => d.id === state.myDoorId)) el.myDoorSelect.value = state.myDoorId;
-    else el.myDoorSelect.value = state.doors.find((d) => d.occupantAccount === state.account)?.id || state.doors[0]?.id;
     connectWS();
     loadLogs();
     // デモ用ディープリンク：?door=chanoma で、そのドアをノックしてすぐ入室

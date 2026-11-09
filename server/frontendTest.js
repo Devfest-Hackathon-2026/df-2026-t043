@@ -56,12 +56,17 @@ async function runFrontendTests() {
   });
   let source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
   source = source.replace('  boot();', `  globalThis.test = { state, el, normalizeSummary, normalizeDoor, loadLS,
-    startLocalMedia, switchCamera, stopLocalMedia, getMedia, openGeminiPresence, closeModal,
+    startLocalMedia, switchCamera, stopLocalMedia, getMedia, closeModal, onRoomState,
     drawRandomTopic, generateGeminiTopic, resetRoom, onSignal, handleMessage };`);
   vm.runInContext(source, context, { filename: 'public/app.js' });
   const t = context.test;
   for (const score of [0, 1, 5, 10, 84, null]) assert.equal(t.normalizeSummary({ vitalityScore: score }).vitalityScore, score);
-  assert.equal(t.normalizeDoor({ occupantAccount: '', participants: ['visitor'], mode: 'away' }).occupantAccount, '');
+  for (const participants of [[], ['same'], ['same', 'same']]) {
+    const door = t.normalizeDoor({ participants });
+    assert.equal(door.participantCount, participants.length);
+    assert.equal(door.isOpen, participants.length > 0);
+    assert.equal(door.statusText, participants.length === 0 ? '空室 — ノックして団らんを始める' : participants.length === 1 ? '-same-がくつろいでいます。' : '-same-ほか計2人が団らん中');
+  }
   storage.set('bad', '{}'); assert.equal(t.loadLS('bad', []).length, 0);
   await assert.rejects(t.getMedia({ video: true }), /unavailable/);
   t.state.selfCam = { c: {}, start() {}, stop() {} };
@@ -74,12 +79,23 @@ async function runFrontendTests() {
   assert.equal(t.state.room, null);
 
   t.state.room = { participants: new Set(['me']) };
+  t.el.simulatorTile.hidden = false;
   await t.onSignal({ fromId: 'server-1', accountName: 'trusted', payload: { from: 'peer', name: 'spoof', kind: 'candidate', candidate: { candidate: 'ice' } } });
+  assert.equal(t.el.simulatorTile.hidden, true, 'A new WebRTC peer hides the waiting placeholder');
   const oldPeer = t.state.peers.get('peer');
   assert.equal(oldPeer.pendingIce.length, 1);
   assert.equal(oldPeer.name, 'trusted');
   await t.onSignal({ fromId: 'server-2', accountName: 'trusted', payload: { from: 'peer', kind: 'candidate', candidate: { candidate: 'new-ice' } } });
   assert.notEqual(t.state.peers.get('peer'), oldPeer);
+  t.resetRoom();
+  assert.equal(t.state.peers.size, 0);
+  assert.equal(t.el.simulatorTile.hidden, false, 'Resetting the room restores the waiting placeholder');
+  t.state.room = { participants: new Set(['me']) };
+  await t.onSignal({ fromId: 'server-2', accountName: 'trusted', payload: { from: 'peer', kind: 'candidate', candidate: { candidate: 'ice' } } });
+  assert.equal(t.el.simulatorTile.hidden, true);
+  await t.onSignal({ fromId: 'server-2', accountName: 'trusted', payload: { from: 'peer', kind: 'bye' } });
+  assert.equal(t.state.peers.size, 0);
+  assert.equal(t.el.simulatorTile.hidden, false, 'The last peer leaving restores the waiting placeholder');
   t.handleMessage({ type: 'error', requestType: 'enter_door' });
   assert.equal(t.state.room, null);
 
@@ -125,14 +141,22 @@ async function runFrontendTests() {
   assert.equal(rejected.readyState, 'ended');
   t.state.peers.clear(); t.stopLocalMedia();
 
-  // Closing a preview during a permission prompt must not leave the camera on.
-  context.navigator.mediaDevices.getUserMedia = () => new Promise((r) => { resolveMedia = r; });
-  t.state.doors = [];
-  t.openGeminiPresence();
-  t.closeModal();
-  const previewTrack = track(); resolveMedia(new Stream([previewTrack]));
-  await new Promise((r) => setImmediate(r));
-  assert.equal(previewTrack.readyState, 'ended');
+  // Room counts use connection identities, while report history survives departures.
+  t.state.room = { door: { id: 'chanoma' }, participants: new Set(['same']), topicsUsed: [] };
+  t.onRoomState({ selfId: 'a', participants: [{ id: 'a', accountName: 'same' }, { id: 'b', accountName: 'same' }] });
+  assert.equal(t.el.roomCount.textContent, '👥 2人');
+  assert.equal(t.el.roomWaiting.hidden, true);
+  t.onRoomState({ selfId: 'a', participants: [{ id: 'a', accountName: 'same' }, { id: 'b', accountName: 'other' }] });
+  t.onRoomState({ selfId: 'a', participants: [{ id: 'a', accountName: 'same' }] });
+  assert.equal(t.el.roomCount.textContent, '👥 1人');
+  assert.ok(t.state.room.participants.has('other'));
+  const card = (id) => ({ id, category: 'a', topic: `topic-${id}`, hint: '' });
+  t.handleMessage({ type: 'topic_shared', doorId: 'engawa', topic: card(1) });
+  assert.equal(t.state.room.topicsUsed.length, 0);
+  t.handleMessage({ type: 'topic_shared', doorId: 'chanoma', fromId: 'a', topic: card(2) });
+  assert.equal(t.state.room.currentTopic.id, 2);
+  t.onRoomState({ selfId: 'a', participants: [{ id: 'a', accountName: 'same' }], currentTopic: card(3) });
+  assert.equal(t.state.room.currentTopic.id, 3);
 
   // A generated topic from an old room must not appear in a new session.
   let resolveFetch;

@@ -101,6 +101,7 @@ button { font-family: inherit; }
 .controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; flex: 1; }
 .field { display: flex; flex-direction: column; gap: 0.15rem; }
 .field-label { font-size: 0.72rem; opacity: 0.9; }
+.field-account input { min-width: 14em; font-size: 1.1rem; }
 .field input, .field select {
   font-family: inherit; font-size: 1rem; font-weight: 700;
   padding: 0.45em 0.7em; min-width: 9em;
@@ -134,6 +135,13 @@ button { font-family: inherit; }
 .hallway-intro { text-align: center; margin: 1rem auto 1.4rem; max-width: 46rem; }
 .hallway-intro h2 { font-size: 1.55rem; margin: 0 0 0.4rem; }
 .hallway-intro p { margin: 0; color: var(--ink-soft); }
+.hallway-live {
+  display: inline-block; margin-top: 0.8rem !important;
+  padding: 0.35em 1em; border-radius: 999px;
+  background: var(--washi-2); color: var(--ink-soft) !important;
+  font-weight: 700; font-size: 0.95rem;
+}
+.hallway-live.is-live { background: rgba(255, 207, 122, 0.55); color: var(--wood-deep) !important; box-shadow: 0 0 16px var(--lamp-glow); }
 
 .hallway {
   position: relative;
@@ -246,12 +254,6 @@ button { font-family: inherit; }
   box-shadow: 0 0 18px var(--lamp-glow), inset 0 0 10px rgba(255, 255, 255, 0.6);
   animation: flicker 4.5s ease-in-out infinite;
 }
-.door-unit.is-dim .door-glass span {
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.2) 0 2px, transparent 2px 6px),
-    linear-gradient(180deg, #d9c39a, #b49563);
-  box-shadow: 0 0 8px rgba(255, 196, 102, 0.25);
-}
 @keyframes flicker {
   0%, 100% { filter: brightness(1); }
   40% { filter: brightness(1.08); }
@@ -289,13 +291,24 @@ button { font-family: inherit; }
   background: radial-gradient(circle at 35% 35%, #fff2b8, #c9a13b 50%, #7a5c12);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
 }
-.door-mine-badge {
-  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 4; white-space: nowrap;
-  background: var(--vermilion); color: #fff;
-  padding: 0.15em 0.6em; border-radius: 999px;
-  font-size: 0.75rem; font-weight: 700;
+.door-number {
+  position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 4; white-space: nowrap;
+  background: var(--wood-deep); color: #fff7e6;
+  padding: 0.1em 0.8em; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 900; letter-spacing: 0.08em;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
+.door-count {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 4; white-space: nowrap;
+  background: var(--vermilion); color: #fff;
+  padding: 0.15em 0.7em; border-radius: 999px;
+  font-size: 0.9rem; font-weight: 900;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.door-count:empty { display: none; }
+/* 空室：明かりを消して少し沈んだ見た目に */
+.door-unit.is-empty .door-leaf { filter: saturate(0.75) brightness(0.92); }
+.door-unit.is-empty .door-plate { background: linear-gradient(180deg, #f1ebde, #e2d7c0); }
 .door-floor-glow {
   width: 110%; height: 16px; margin-top: -10px;
   background: radial-gradient(ellipse at 50% 0, var(--lamp-glow), transparent 70%);
@@ -336,23 +349,21 @@ button { font-family: inherit; }
   box-shadow: var(--shadow);
   border: 2px solid rgba(139, 90, 43, 0.2);
   display: flex; flex-direction: column; gap: 0.45rem;
-  margin-bottom: 1rem; min-height: 15.5rem;
+  margin-bottom: 1rem; min-height: 13rem;
 }
 .door-name { margin: 0; font-size: 1.1rem; font-weight: 900; }
 .door-subtitle { margin: 0; font-size: 0.82rem; color: var(--ink-soft); }
-.timing {
+.occupancy {
   display: inline-flex; align-items: center; gap: 0.3rem; align-self: flex-start;
-  padding: 0.25em 0.7em; border-radius: 999px;
-  font-weight: 700; font-size: 0.9rem; color: #fff;
-  background: var(--busy);
+  padding: 0.25em 0.8em; border-radius: 999px;
+  font-weight: 900; font-size: 0.92rem;
 }
-.timing.t-good { background: var(--good); }
-.timing.t-maybe { background: var(--maybe); }
-.timing.t-busy { background: var(--busy); }
-.ai-detail { margin: 0; font-size: 0.85rem; color: var(--ink-soft); }
-.ai-detail .ai-src { font-size: 0.72rem; color: var(--indigo); font-weight: 700; margin-right: 0.3em; }
-.door-people { margin: 0; font-size: 0.8rem; color: var(--ink-soft); }
-.knock-btn { margin-top: auto; font-size: 0.98rem; white-space: nowrap; }
+.occupancy.is-open { background: var(--good); color: #fff; }
+.occupancy.is-vacant { background: var(--washi-2); color: var(--ink-soft); border: 1px dashed rgba(139, 90, 43, 0.4); }
+.door-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.88rem; font-weight: 700; }
+.door-people li { padding: 0.2em 0.6em; border-radius: 10px; background: rgba(255, 207, 122, 0.25); word-break: break-all; }
+.door-people li.is-me { background: rgba(200, 85, 61, 0.14); }
+.knock-btn { margin-top: auto; font-size: 0.95rem; white-space: normal; }
 
 /* ---------- 安心見守りノート ---------- */
 .care-notes {
@@ -447,6 +458,15 @@ button { font-family: inherit; }
   font-size: 0.85rem; font-weight: 700;
 }
 .participant.is-me { border-color: var(--vermilion); }
+.participant-label { font-weight: 900; }
+.room-number { display: inline-block; font-size: 0.75rem; font-weight: 900; letter-spacing: 0.08em; color: #fff7e6; background: var(--wood-deep); padding: 0 0.7em; border-radius: 999px; }
+.badge-count { font-weight: 900; }
+.room-waiting {
+  margin: 0 0 0.6rem; padding: 0.6rem 0.9rem;
+  border-radius: 14px; border: 2px dashed rgba(139, 90, 43, 0.4);
+  background: rgba(255, 250, 240, 0.9); color: var(--ink-soft);
+  font-size: 0.9rem; font-weight: 700;
+}
 
 .stage {
   display: grid; gap: 0.8rem;
@@ -467,6 +487,24 @@ button { font-family: inherit; }
 .video-tile video, .video-tile canvas {
   width: 100%; height: 100%; display: block; object-fit: cover;
   background: #3b2a1a;
+}
+/* 障子と灯りを思わせる、家族の入室待ちの茶の間 */
+.tile-empty {
+  display: grid; place-items: center;
+  min-height: 320px; aspect-ratio: auto;
+  background: radial-gradient(ellipse at 50% 30%, #fff8df, transparent 70%),
+    repeating-linear-gradient(90deg, transparent 0 95px, rgba(139, 90, 43, 0.08) 95px 98px), #eee3cd;
+  color: var(--ink);
+}
+.tile-empty[hidden] { display: none; }
+.waiting-content { padding: clamp(1.25rem, 4vw, 3rem); text-align: center; }
+.waiting-lantern { display: block; font-size: 3rem; margin-bottom: 0.75rem; }
+.waiting-content h2 { margin: 0 0 1rem; font-size: clamp(1.15rem, 3vw, 1.7rem); }
+.waiting-content p { margin: 0 0 1.5rem; line-height: 1.9; color: var(--ink-soft); }
+.waiting-badge {
+  display: inline-block; padding: 0.5em 1em; border-radius: 999px;
+  background: #fffaf0; border: 1px solid #d7bb8d;
+  font-size: 0.85rem; font-weight: 700;
 }
 .tile-self video { transform: scaleX(-1); }
 .tile-self.is-virtual video { transform: none; }
@@ -530,6 +568,60 @@ button { font-family: inherit; }
   cursor: pointer; transition: transform 0.15s;
 }
 .react:hover { transform: scale(1.12) rotate(-6deg); }
+
+.call-settings > summary { display: none; }
+.call-settings > :not(summary) { margin-top: 0.6rem; }
+.call-settings > .cam-switch { margin-top: 0; }
+.walk-panel {
+  min-width: 0; margin-top: 1rem; padding: 0.85rem 1rem;
+  background: #fffaf0; border: 2px solid var(--wood-light);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.walk-heading, .walk-setup { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; }
+.walk-heading { justify-content: space-between; }
+.walk-heading h3 { margin: 0; font-size: 1.15rem; }
+.walk-setup { margin-top: 0.55rem; }
+.walk-setup label { font-weight: 700; }
+.walk-setup select {
+  min-height: 44px; max-width: 100%; padding: 0.35rem 0.5rem;
+  border: 2px solid var(--wood-light); border-radius: 10px;
+  font: inherit; color: var(--ink); background: #fff;
+}
+.walk-panel .btn, .is-walking .mini-controls .btn { min-height: 44px; }
+.walk-panel .btn:disabled { opacity: 0.65; cursor: default; }
+.walk-status { color: var(--ink-soft); font-size: 0.9rem; margin: 0.45rem 0; }
+.walk-view { height: clamp(240px, 46vh, 460px); background: var(--washi-2); }
+.walk-pano { width: 100%; height: 100%; }
+.stage-col.is-walking {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 0.75rem; align-items: start;
+}
+.is-walking .participants { grid-column: 1 / -1; margin: 0; }
+.is-walking .walk-panel { margin: 0; }
+.is-walking .stage { grid-template-columns: repeat(auto-fit, minmax(min(100%, 115px), 1fr)); }
+.is-walking .self-row { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; margin-top: 0.6rem; }
+.is-walking .video-tile { border-width: 4px; border-radius: 8px; }
+.is-walking .video-tile video, .is-walking .video-tile canvas { object-fit: contain; }
+.is-walking .name-tag { font-size: 0.75rem; left: 4px; bottom: 4px; max-width: calc(100% - 8px); overflow-wrap: anywhere; }
+.is-walking .tile-note { font-size: 0.6rem; right: 4px; top: 4px; }
+.is-walking .self-controls { padding: 0.45rem; }
+.is-walking .call-settings > summary {
+  display: list-item; min-height: 44px; padding: 0.55rem 0.2rem;
+  cursor: pointer; font-weight: 700; font-size: 0.82rem;
+}
+.is-walking .call-settings > .cam-switch { margin-top: 0.5rem; }
+.is-walking .cam-opt { min-width: min(100%, 9em); }
+@media (max-width: 760px) {
+  .stage-col.is-walking { grid-template-columns: minmax(0, 1fr); }
+  .is-walking .call-stage {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; align-items: start;
+  }
+  .is-walking .self-row { display: contents; }
+  .is-walking .self-controls { grid-column: 1 / -1; flex-direction: row; align-items: start; flex-wrap: wrap; }
+  .is-walking .call-settings { flex: 1; min-width: 9rem; }
+  .is-walking .walk-panel { padding: 0.65rem; }
+  .walk-view { height: clamp(240px, 39svh, 380px); }
+}
 
 /* ---------- サイド：話題カード ---------- */
 .side-col { display: flex; flex-direction: column; gap: 1rem; }
