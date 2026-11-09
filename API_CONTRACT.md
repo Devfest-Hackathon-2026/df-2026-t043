@@ -8,15 +8,15 @@
   - ロビーには4つのドア（`chanoma`: 茶の間、`engawa`: 縁側、`kitchen`: ダイニング、`hobby`: 趣味部屋）が並ぶ。
   - 誰も入っていないドアは「空室（すぐ入れます / 0人）」。
   - 誰かがドアを開けて入室（`enter_door`）している間だけ、そのドアインスタンスに明かりが灯り、現在その部屋に入っているメンバー（例：`1人入室中：-yoikoarmor-がくつろいでいます。`）がリアルタイム表示される。
-  - 同じドアに入った人同士で、即座に **WebRTC ビデオ通話（カメラ常時ON：実カメラ or バーチャル茶の間カメラ）** と **団らん話題カード（100選ランダム ＋ Gemini 2.5 Flash 生成）** が共有される。
-  - 退室時には、そのドアインスタンスでの団らん内容を Gemini 2.5 Flash が「安心団らんレポート」として要約・記録する。
+  - 同じドアに入った人同士で、即座に **WebRTC ビデオ通話（カメラ常時ON：実カメラ or バーチャル茶の間カメラ）** と **団らん話題カード（100選ランダム ＋ Gemini生成［TBW］）** が共有される。
+  - 退室時には、そのドアインスタンスでの団らん内容を Gemini が「安心見守りレポート」として要約・記録する。
 
 ---
 
 ## 2. REST API エンドポイント仕様 (`server/index.js`)
 
 ### `GET /api/health`
-- `{ ok: true, service: "tonari-door-danran", geminiConfigured: boolean, model: "gemini-2.5-flash", timestamp: string }`
+- `{ ok: true, service: "tonari-door-danran", geminiConfigured: boolean, model: string, timestamp: string }`
 
 ### `GET /api/doors`
 - 4つのドアインスタンスの現在のリアルタイム入室状況を返す（誰も入室していない初期状態では `participants: []`, `participantCount: 0`, `isOpen: false`）：
@@ -32,6 +32,7 @@
       "theme": "warm-wood",
       "participants": [],
       "participantCount": 0,
+      "isOpen": false,
       "statusText": "空室 — ノックして団らんを始める",
       "updatedAt": "2026-11-09T10:00:00.000Z"
     }
@@ -47,20 +48,19 @@
 
 ### `POST /api/topics/generate`
 - Body: `{ accountName, partnerAccount, doorName, context }`
-- Gemini (`gemini-2.5-flash`) で団らん話題カードを1件生成（未設定・エラー時は100選からフォールバック）。
+- **TBW（ユーザー向け機能）**。画面ボタンは無効。内部APIはGeminiで話題カードを返す実装を持ち、未設定・失敗時は100選へフォールバックする。モデルは `GEMINI_MODEL` で設定。
 
 ### `POST /api/summary` ＆ `GET /api/logs`
-- 退室時にそのドアインスタンスでの通話時間・参加者・引いた話題カード・メモから Gemini (`gemini-2.5-flash`) が団らんレポートを生成・保存する。
+- 退室時にそのドアインスタンスでの通話時間・参加者・引いた話題カード・メモから Geminiが非医療的な安心見守りレポートを生成し、サーバーのメモリに最大100件記録する。モデルは `GEMINI_MODEL` で設定。失敗時は入力に基づく簡易記録（元気度は未評価）を返す。
 
 ### `GET /api/walk-config`
 
 共有散歩の行き先と、Maps JavaScript API 用のブラウザーキーを返す。キーは `GOOGLE_MAPS_BROWSER_API_KEY` から読み取り、未設定の場合は空文字を返す。公開先の HTTP リファラーと Maps JavaScript API に制限したキーを設定する。
 
-`ENABLE_SHARED_WALK=true` のときだけ有効。無効時は `{"enabled":false,"apiKey":"","places":[]}` を返し、散歩用 WebSocket メッセージは 403 で拒否する。
+現在は `ENABLE_SHARED_WALK` による有効化条件を設けていない。応答に `enabled` は含めない。キー未設定時も行き先一覧を返すが、ブラウザでの景色表示には有効なMapsキーが必要。
 
 ```json
 {
-  "enabled": true,
   "apiKey": "",
   "places": [
     { "id": "asakusa", "name": "浅草", "position": { "lat": 35.711, "lng": 139.796 } },
@@ -115,3 +115,7 @@
   }
 }
 ```
+
+### `GET /api/rtc-config`
+
+`{ iceServers }` を返す。既定はGoogle STUN。`TURN_URLS` とサーバー専用の `TURN_SHARED_SECRET` が設定されていれば、有効期限付きのTURN資格情報を追加する。資格情報の値を文書・ログに貼り付けない。

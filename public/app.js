@@ -1577,7 +1577,7 @@
     el.topicHint.textContent = t.hint ? `💡 ${t.hint}` : '';
     let label;
     if (source === 'shared') label = `🤝 -${by || '家族'}-が引いたカード`;
-    else if (isGemini) label = '✨ Gemini 2.5 Flash 生成';
+    else if (isGemini) label = '✨ Gemini 生成';
     else if (source === 'gemini-fallback') label = `🎴 100選 No.${t.id ?? '-'}（Gemini休憩中）`;
     else label = `🎴 団らん100選 No.${t.id ?? '-'}`;
     el.topicSource.textContent = label;
@@ -1721,7 +1721,7 @@
   function renderSummaryModal(s) {
     openModal(`📓 ${s.title}`, [
       h('p', {}, h('span', { class: `source-tag ${s.source === 'gemini' ? '' : 'is-fallback'}` },
-        s.source === 'gemini' ? '✨ Gemini 2.5 Flash がまとめました' : '🏮 かんたん記録（Gemini未接続）'),
+        s.source === 'gemini' ? '✨ Gemini がまとめました' : '🏮 かんたん記録（Gemini未接続）'),
         '　', h('time', {}, formatDate(s.createdAt))),
       vitalityNode(s.vitalityScore),
       h('p', { class: 'summary-mood' }, `🌤 様子：${s.mood}`),

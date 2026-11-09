@@ -1,407 +1,64 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DevFest GDGoC Japan 2026 Hackathon — プロダクト説明ドキュメント（となりドア）</title>
-  <style>
-    @page { size: A4; margin: 18mm 18mm; }
-    * { box-sizing: border-box; }
-    body {
-      font-family: "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
-      color: #111;
-      line-height: 1.65;
-      max-width: 820px;
-      margin: 0 auto;
-      padding: 32px 24px;
-      background: #fff;
-      font-size: 14px;
-    }
-    .cover {
-      min-height: 85vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 40px 24px;
-      page-break-after: always;
-    }
-    .cover h1 {
-      text-align: center;
-      font-size: 28px;
-      font-weight: 500;
-      margin-bottom: 48px;
-    }
-    .cover-grid {
-      display: grid;
-      grid-template-columns: 160px 1fr;
-      row-gap: 20px;
-      font-size: 18px;
-      margin-left: 24px;
-    }
-    .cover-app-title {
-      text-align: center;
-      font-size: 26px;
-      font-weight: 700;
-      margin: 32px 0;
-    }
-    .category-badge {
-      display: inline-block;
-      background: #38a169;
-      color: #fff;
-      font-weight: 700;
-      padding: 3px 14px;
-      border-radius: 6px;
-      font-size: 16px;
-    }
-    h1.section-badge {
-      font-size: 22px;
-      margin-top: 32px;
-      margin-bottom: 16px;
-    }
-    h2 {
-      font-size: 20px;
-      font-weight: 500;
-      margin-top: 28px;
-      margin-bottom: 12px;
-    }
-    h3 {
-      font-size: 16px;
-      font-weight: 500;
-      margin-top: 20px;
-      margin-bottom: 10px;
-      margin-left: 16px;
-    }
-    .box {
-      border: 1px solid #222;
-      padding: 14px 18px;
-      margin: 10px 0 20px 16px;
-      background: #fff;
-    }
-    .box p { margin: 6px 0; }
-    .box ul, .box ol { margin: 6px 0; padding-left: 24px; }
-    .box li { margin: 4px 0; }
-    table {
-      width: calc(100% - 16px);
-      margin: 10px 0 20px 16px;
-      border-collapse: collapse;
-      font-size: 13.5px;
-    }
-    th, td {
-      border: 1px solid #222;
-      padding: 8px 12px;
-      vertical-align: top;
-      text-align: left;
-    }
-    th {
-      background: #f8f9fa;
-      font-weight: 600;
-    }
-    .checklist {
-      list-style: none;
-      padding-left: 36px;
-      margin: 12px 0 20px;
-      font-size: 15px;
-    }
-    .checklist li { margin: 6px 0; }
-    .arch-box {
-      border: 1px solid #222;
-      padding: 16px;
-      margin: 10px 0 20px 16px;
-      text-align: center;
-    }
-    .arch-box img {
-      max-width: 100%;
-      height: auto;
-      border: 1px solid #ddd;
-    }
-    @media print {
-      body { padding: 0; }
-      .page-break { page-break-before: always; }
-    }
-  </style>
-</head>
-<body>
-
-  <!-- Page 1: Cover -->
-  <section class="cover">
-    <h1>DevFest GDGoC Japan 2026 Hackathon</h1>
-
-    <p style="font-size: 18px; margin-bottom: 24px;">チーム情報</p>
-    <div class="cover-grid">
-      <div>会場</div><div>：東京</div>
-      <div>チーム名</div><div>：Generator-Critic</div>
-      <div>メンバー</div><div>：yoikoarmor(小沢司)、suzukimain(鈴木崇博)</div>
-    </div>
-
-    <p style="font-size: 18px; margin-top: 36px;">アプリケーション名</p>
-    <div class="cover-app-title">「となりドア」</div>
-
-    <div class="cover-grid" style="margin-bottom: 28px;">
-      <div>カテゴリ</div>
-      <div>：<span class="category-badge">医療・福祉 ▾</span></div>
-    </div>
-
-    <p style="font-size: 17px; margin-top: 16px;">
-      GitHub リポジトリ URL：<a href="https://github.com/yoikoarmor/GDG-hackathon">https://github.com/yoikoarmor/GDG-hackathon</a>
-    </p>
-  </section>
-
-  <!-- Page 2: Required Items -->
-  <h1 class="section-badge">【必須項目】</h1>
-
-  <h2>1.　プロジェクト概要</h2>
-  <div class="box">
-    <p>「となりドア」は、離れて暮らす親や祖父母の様子が気になる家族が、<strong>廊下に並ぶ4つのドアの明かり（在室状況）から「今、声をかけてもいいタイミングか」を知り、ノックしてドアを開けるだけで顔を見ながら自然な団らんができる</strong>Webアプリケーションです。</p>
-    <p>誰も入っていないドアは「空室（消灯）」ですが、家族の誰かがドアを開けて部屋に入ると、廊下のドアに明かりが灯り <strong>「-yoikoarmor-がくつろいでいます。」</strong> と表示されます。生の監視カメラ映像を常時垂れ流すのではなく「ドアの明かりと在室プレート」で気配を伝え、同じドアをノックして入室した家族同士だけを <strong>WebRTC ビデオ通話（実カメラ／バーチャル茶の間カメラ常時ON）</strong> でつなぎます。さらに「団らん話題カード（100選ランダム抽選 ＋ Gemini生成［TBW］）」と、退室後の <strong>Gemini 2.5 Flash</strong> による「安心見守りレポート（元気度・様子・次回の話題提案）」によって、離れて暮らす家族の孤立防止と継続的な見守りを実現します。</p>
-    <ul>
-      <li><strong>対象カテゴリ</strong>：医療・福祉（高齢者見守り・遠距離家族ケア・孤立防止）</li>
-      <li><strong>目的</strong>：「用事がないと電話しづらい」という声かけのハードルと、「見守りカメラは監視されているようで嫌だ」というプライバシーへの抵抗感を同時に解消し、業務的でない家族の団らんを作ること</li>
-      <li><strong>プライバシーと安心の担保</strong>：廊下には「どのドアに誰が入室中か」の明かりだけを表示して生映像の常時監視をなくし、同じドアに入った家族同士だけがお互いの顔を見ながら会話でき、退室後は「安心見守りノート」で家族の安心を支える設計を導入</li>
-    </ul>
-  </div>
-
-  <h2>2.　解決する課題</h2>
-
-  <h3>2.1.　対象ユーザー</h3>
-  <div class="box">
-    <ul>
-      <li>離れて暮らす高齢の親や祖父母の様子が気になっている家族（子・孫世代）</li>
-      <li>一人暮らしや夫婦のみで暮らしており、家族と気軽に顔を見て話したい高齢者本人</li>
-      <li>見守りカメラの設置には抵抗があるが、日々の元気さや顔色を自然に確かめ合いたい家族</li>
-    </ul>
-  </div>
-
-  <h3>2.2.　課題と根拠</h3>
-  <div class="box">
-    <p>離れて暮らす親や祖父母の様子が気になっていても、毎日訪ねたり電話したりするのには3つの大きな障壁があります。第一に「今忙しいかな？」「特別な用事がないとかけづらい」という<strong>声をかけるタイミングの迷い</strong>、第二に室内カメラに対する<strong>「監視されているようで嫌だ」というプライバシー上の拒否感</strong>、第三にZoom等のWeb会議ツールの<strong>「業務的で予定調整が必要」という心理的ハードルおよび音声通話だけでは顔色・元気さが分からない限界</strong>です。本プロジェクトでは、「4つのドアの明かりで今くつろいでいる場所・タイミングがわかること」と「あえてビデオ通話を基本にしたビデオ会議の団らん化」によってこれらの課題を解決します。</p>
-  </div>
-
-  <h3>2.3.　既存手法との違い</h3>
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 22%;">観点</th>
-        <th style="width: 39%;">従来の手法（電話・見守りカメラ・Zoom等）</th>
-        <th style="width: 39%;">となりドア</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>声をかけるタイミングの把握</td>
-        <td>相手が今どういう状態か分からず、電話をかけるのを躊躇してしまう</td>
-        <td>4つのドアの明かりと「-アカウント名-がくつろいでいます。」のリアルタイム在室表示で一目で分かる</td>
-      </tr>
-      <tr>
-        <td>プライバシーへの配慮</td>
-        <td>見守りカメラは生映像を常時配信するため監視感が強い</td>
-        <td>廊下には「ドアの明かりと入室者名」だけを表示し、映像は同じドアに入った家族同士のブラウザ間（P2P）にしか届かない</td>
-      </tr>
-      <tr>
-        <td>通話空間の体験（団らん化）</td>
-        <td>Zoom等は業務的でURL共有が必要。用件がないと沈黙しがち</td>
-        <td>木目と暖簾の4つのドア（茶の間・縁側・ダイニング・趣味部屋）をノックして入り、100選の「話題カード」（＋Gemini生成：TBW）で自然に会話が弾む</td>
-      </tr>
-      <tr>
-        <td>相手の様子・顔色の確認</td>
-        <td>音声電話だけでは顔色や元気さが分からず心配が残る</td>
-        <td>あえてビデオ通話を常時ON（実カメラ／バーチャル茶の間カメラ）にし、お互いの顔を見て安心できる</td>
-      </tr>
-      <tr>
-        <td>通話後の家族間共有</td>
-        <td>通話した本人しか親の様子が分からない</td>
-        <td>退室時にGemini 2.5 Flashが「安心見守りレポート（元気度・様子・次回の話題）」を自動生成し家族で共有できる</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h2>3.　Google技術の活用</h2>
-
-  <h3>3.1.　使用したGoogle技術 (少なくとも一つ選択)</h3>
-  <ul class="checklist">
-    <li>☐ App Engine</li>
-    <li>☐ Compute Engine</li>
-    <li>☐ Google Kubernetes Engine（GKE）</li>
-    <li>☑ <strong>Cloud Run</strong></li>
-    <li>☐ Firebase App Hosting</li>
-    <li>☐ <strong>Firebase Hosting</strong>（静的なひとりデモ用設定のみ。共同利用は Cloud Run URL）</li>
-  </ul>
-
-  <h3>3.2.　Google技術の活用例</h3>
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 20%;">使用技術</th>
-        <th style="width: 24%;">使用箇所</th>
-        <th style="width: 30%;">選定理由・メリット</th>
-        <th style="width: 26%;">デメリット</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Gemini API / Vertex AI<br/>(<code>gemini-2.5-flash</code> / <code>@google/genai</code>)</td>
-        <td>①退室後の安心見守りレポート自動要約（<code>POST /api/summary</code>）<br/>②団らん話題カード生成（TBW）</td>
-        <td>会話の文脈・時間帯・気づきメモを高速に理解し、JSONスキーマ指定によりUI表示用の構造化データを低遅延かつ安定して生成できる</td>
-        <td>API利用料金やレート制限、応答遅延への配慮（ローカル100選デッキへのフォールバック）が必要</td>
-      </tr>
-      <tr>
-        <td>Cloud Run</td>
-        <td>Webフロントエンド配信、REST API、4ドアのWebSocketシグナリングサーバー（<code>/ws</code>）のホスティング</td>
-        <td>単一コンテナで静的配信・AI呼び出し・WebSocket常時接続・自動SSL（<code>https://</code>）を統合でき運用負担が小さい</td>
-        <td>インメモリで部屋状態を共有するため、セッションアフィニティやインスタンス数制御への配慮が必要</td>
-      </tr>
-      <tr>
-        <td>Google STUN<br/>(<code>stun.l.google.com</code>)</td>
-        <td>別ネットワーク間のWebRTCビデオ通話（P2P接続確立）</td>
-        <td>映像・音声をサーバー中継せずブラウザ間で直接通信でき、低遅延かつプライバシー性が高い</td>
-        <td>厳格なキャリアNAT環境ではTURNサーバーが別途必要になる場合がある</td>
-      </tr>
-      <tr>
-        <td>Cloud Secret Manager / 環境変数</td>
-        <td><code>GEMINI_API_KEY</code> や <code>GEMINI_VERTEX_PROJECT</code> の安全な管理・注入</td>
-        <td>認証情報やAPIキーをクライアントやGitに露出させずサーバー内部のみで利用できる</td>
-        <td>デプロイ時にIAM権限の設定が必要</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>3.3.　Google技術を選定した理由</h3>
-  <div class="box">
-    <p>本プロジェクトでは、限られた開発期間内に「カメラ・マイク必須のWebRTCビデオ通話」「4つのドアの開閉や話題カードをリアルタイム同期するWebSocket通信」「会話を弾ませ見守り記録を残すAI処理」の3つを統合する必要がありました。</p>
-    <p><strong>Cloud Run</strong> を採用することで、WebRTCのカメラ取得に必須となる <code>https://</code>（自動SSL証明書）と WebSocket 常時接続、さらにサーバーサイドでの Gemini 呼び出しを単一コンテナ（<code>https://gdg-hackathon-752978143113.asia-northeast1.run.app/</code>）で実現し、インフラ構築時間を大幅に削減しました。また、会話中のリアルタイム話題生成と退室直後の見守りレポート要約を行う中核AIとして、高速レスポンスと厳密なJSON構造化出力（Structured Outputs）を兼ね備えた <strong>Gemini 2.5 Flash</strong> を選定しました。</p>
-  </div>
-
-  <h2>4.　アーキテクチャ図</h2>
-  <div class="arch-box">
-    <img src="../public/assets/pipeline.gif" alt="となりドア アーキテクチャ＆パイプライン図" />
-  </div>
-
-  <h2>5.　プロジェクトをデプロイしたURL</h2>
-  <div class="box">
-    <p>アプリケーションURL：<a href="https://gdg-hackathon-752978143113.asia-northeast1.run.app/">https://gdg-hackathon-752978143113.asia-northeast1.run.app/</a></p>
-    <p>バーチャルカメラでの即時入室URL：<a href="https://gdg-hackathon-752978143113.asia-northeast1.run.app/?door=chanoma&amp;cam=virtual">https://gdg-hackathon-752978143113.asia-northeast1.run.app/?door=chanoma&amp;cam=virtual</a></p>
-  </div>
-
-  <!-- Optional Items -->
-  <h1 class="section-badge page-break">【任意項目】</h1>
-
-  <h2>6.　動作確認の方法</h2>
-
-  <h3>6.1.　テストアカウント情報</h3>
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 32%;">項目</th>
-        <th>内容</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>アプリケーションURL</td>
-        <td><a href="https://gdg-hackathon-752978143113.asia-northeast1.run.app/">https://gdg-hackathon-752978143113.asia-northeast1.run.app/</a></td>
-      </tr>
-      <tr>
-        <td>初期アカウント名</td>
-        <td><code>yoikoarmor</code> または <code>suzukimain</code>（画面上部で自由に入力・変更可能）</td>
-      </tr>
-      <tr>
-        <td>パスワード</td>
-        <td>不要（高齢者でも迷わずワンタップで入室できる設計のためログイン不要）</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>6.2.　動作確認手順</h3>
-  <div class="box">
-    <ol>
-      <li>上記URLにアクセスし、「🍵 実家の茶の間」「🌼 日当たりのいい縁側」「🍲 夕暮れの台所・ダイニング」「🎨 みんなの趣味部屋」の4つの独立したドアが並んでいることを確認します（誰も入っていないドアは「空室」）。</li>
-      <li>画面上部でアカウント名を確認し、「🍵 実家の茶の間」の「✊ ノックして入る」を押して団らんルームへ入室します。カメラが常時ON（実カメラ、またはカメラがない場合は「🍵 バーチャル茶の間カメラ」）になり、廊下のドアに「-{アカウント名}-がくつろいでいます。」と明かりが灯ります。</li>
-      <li>別端末（スマホ・別PC）または別ブラウザ／別タブで同じURLを開き、明かりが灯っている「実家の茶の間」をノックして入室します。待機カードが消え、メイン映像枠に相手のカメラ映像が大きく映り、双方向のWebRTCビデオ通話に繋がることを確認します。</li>
-      <li>自分の映像横にある「📷 実カメラ」「🍵 バーチャル茶の間カメラ」の切替や、リアクションボタン（👋 / 😊 / 🍵 など）の送受信を確認します。</li>
-      <li>「📇 話題カード100選から引く」を押し、同じ部屋の全員に話題カードが共有されることを確認します（※Gemini による話題カード生成は TBW）。</li>
-      <li>「📝 気づきメモ」のチップを選んで「🚪 ドアを閉めて退室（📝 Geminiが団らんレポートを作成）」を押します。</li>
-      <li>Gemini 2.5 Flash が生成した「📓 安心見守りレポート」が表示され、ロビー下部の「安心見守りノート」に履歴が保存されることを確認します。</li>
-    </ol>
-  </div>
-
-  <h3>6.3.　サンプルデータ</h3>
-  <div class="box">
-    <p>4つの独立したドアインスタンスと、100件の話題カードデッキ（<code>public/data/topics.json</code>）を搭載しています。</p>
-    <ul>
-      <li>4つのドア：「🍵 ドア1：実家の茶の間」「🌼 ドア2：日当たりのいい縁側」「🍲 ドア3：夕暮れの台所・ダイニング」「🎨 ドア4：みんなの趣味部屋」</li>
-      <li>話題カード100選：「今日の晩ごはん、何を食べた？」「お庭やベランダの植物、よかったらカメラで見せて！」「今までに行った家族旅行で一番印象に残っている場所は？」など10カテゴリ・100件</li>
-    </ul>
-  </div>
-
-  <h2>7.　アプリの詳細や機能に関する自由記述</h2>
-
-  <h3>7.1.　主な機能</h3>
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 8%;">#</th>
-        <th style="width: 28%;">機能</th>
-        <th>内容</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>1</td>
-        <td>4つのドア＝4つの独立ルームインスタンス</td>
-        <td>事前設定のダミー在室者を置かず、実際に誰かが入室しているドアだけに明かりが灯り「-アカウント名-がくつろいでいます。」とリアルタイム表示します。</td>
-      </tr>
-      <tr>
-        <td>2</td>
-        <td>ビデオ通話常時ONの団らんルーム</td>
-        <td>相手の顔色や様子を自然に確認できるよう、入室時は実カメラまたは「🍵 バーチャル茶の間カメラ」の常時ONを必須としています。</td>
-      </tr>
-      <tr>
-        <td>3</td>
-        <td>相手専用メイン映像枠＆自動再生リカバリ</td>
-        <td>1人で入室中は待機カードを表示し、相手が入室した瞬間にメイン枠へ相手のカメラ映像を大きく映します。ブラウザの自動再生ブロック時もワンタップで復帰できます。</td>
-      </tr>
-      <tr>
-        <td>4</td>
-        <td>団らん話題カード（100選＋Gemini生成［TBW］）</td>
-        <td>100件の初期カードからのランダム抽選・カテゴリ絞り込みと同室者への同期を行います（Gemini による話題生成は TBW）。</td>
-      </tr>
-      <tr>
-        <td>5</td>
-        <td>安心見守りレポート＆ノート</td>
-        <td>退室時に団らん時間・参加者・話題・気づきメモから Gemini 2.5 Flash が元気度・様子・次回の話題提案をまとめ、見守りノートに保存します。</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>7.2.　今後の展望</h3>
-  <div class="box">
-    <ul>
-      <li>Cloud Firestore / Firebase Authentication 連携による家族グループ認証とデータの永続化</li>
-      <li>実家のリビング据え置きタブレット向けの「常設茶の間キオスクモード（ノックにワンタップで応答）」の追加</li>
-      <li>TURN サーバー統合によるモバイル4G/5G回線環境でのWebRTC接続安定性のさらなる向上</li>
-    </ul>
-  </div>
-
-  <!-- Non-scored Items -->
-  <h1 class="section-badge">【採点外項目】</h1>
-
-  <h2>8.　AIをどの場面でどう使用したか、なぜその場面で使用したか</h2>
-  <div class="box">
-    <p>本プロジェクトでは、アプリケーション開発とサービス機能の両面でAIを活用しました。</p>
-    <ul>
-      <li><strong>サービス機能（Google Gemini 2.5 Flash）</strong>：退室後の「安心見守りレポート自動要約（<code>POST /api/summary</code>、次回の話題提案を含む）」に Gemini 2.5 Flash を使用しています（通話中の団らん話題カード生成は TBW）。Cloud Run 上では API キーだけでなく Vertex AI 経由での呼び出しにも対応させています。</li>
-      <li><strong>開発段階（マルチエージェント協調開発）</strong>：共通インターフェース契約（<code>API_CONTRACT.md</code>）と100件の話題データを定義した上で、バックエンド・Cloud Run設計およびパイプラインGIF生成に Codex CLI（<code>gpt-6.1-sol</code>）、木目と暖簾の4ドアUI・バーチャルカメラ実装に Claude Code CLI（<code>opus-5.5-mid</code>）、高速バグ監査・テスト検証に Codex CLI（<code>gpt-6-astra</code>）および統括エージェント（Antigravity）を活用しました。</li>
-    </ul>
-  </div>
-
-  <h2>9.　自分たちが開発を通して何を得て、どれくらい成長できたのか</h2>
-  <div class="box">
-    <p>開発を通して、以下の3つの大きな学びと成長を得ることができました。</p>
-    <ul>
-      <li><strong>社会課題を「シンプルで迷わない空間設計」へ磨き上げるプロダクト思考</strong>：最初は「誰が常時どこにいるかを設定する仕組み」や「デモ用の仮想おばあちゃん」を入れていましたが、実際に触って議論する中で「4つのドアがそれぞれ1つの部屋として存在し、入った人だけがそこにいてビデオ通話できる方がずっと自然で直感的だ」と気づき、シンプルな4ドア・ルームインスタンス方式へとピボットしました。</li>
-      <li><strong>Cloud Run・Gemini API・WebRTC の統合実装力</strong>：HTTPS（カメラ取得）・WebSocket（4部屋状態同期）・Gemini API / Vertex AI を1つの Cloud Run コンテナに統合し、APIキー未設定時やカメラ非搭載環境でも止まらないフォールバック設計を学びました。</li>
-      <li><strong>契約駆動（API Contract）によるAI活用ワークフロー</strong>：複数AIツールを使う際に、先にデータ構造とエンドポイント契約を厳密に定義し、自動テスト（<code>npm test</code>）で品質を担保する実践的な開発手法を習得できました。</li>
-    </ul>
-  </div>
-
-</body>
-</html>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>となりドア プロダクト説明ドキュメント</title><style>
+@page{size:A4;margin:23mm 25mm}*{box-sizing:border-box}body{font-family:Meiryo,'Yu Gothic',sans-serif;color:#111;font-size:10pt;line-height:1.5;max-width:170mm;margin:auto}section{padding:0 0 18mm}h1{font-size:16pt;font-weight:500}h2{font-size:14pt;font-weight:500;margin:14pt 0 10pt}h3{font-size:12pt;font-weight:500}p{margin:5pt 0}.box{border:1px solid #222;padding:6pt;margin-bottom:8pt;break-inside:avoid}table{border-collapse:collapse;width:100%;font-size:9.2pt;margin:8pt 0}td,th{border:1px solid #222;padding:6pt;vertical-align:top;text-align:left;font-weight:400}th{background:#f2f2f2}tr{break-inside:avoid}img{width:100%;height:auto}.cover{padding-top:63mm;min-height:245mm}.cover h1{text-align:center;font-size:19pt}.team{margin:18pt 0 24pt 38pt;font-size:13pt}.category{background:#30a858;color:white;border-radius:6px;padding:4px 9px}.app{text-align:center;font-size:18pt}@media print{section{break-after:page;padding:0;min-height:245mm}section:last-child{break-after:auto}.cover{padding-top:63mm}body{max-width:none}}
+</style></head><body><section class="cover"><h1>DevFest GDGoC Japan 2026 Hackathon</h1><h2>チーム情報</h2><div class="team">会場：東京<br>チーム名：Generator-Critic<br>メンバー：yoikoarmor(小沢司)、suzukimain(鈴木崇博)</div><h2>アプリケーション名</h2><p class="app">「となりドア」</p><p>カテゴリ：<span class="category">医療・福祉</span></p><p>GitHub リポジトリ URL：<br><a href="https://github.com/yoikoarmor/GDG-hackathon">https://github.com/yoikoarmor/GDG-hackathon</a></p></section>
+<section>
+<h1>【必須項目】</h1>
+<h2>1.　プロジェクト概要</h2>
+<div class="box"><p>「となりドア」は、離れて暮らす家族が、4つのドアの明かりから在室状況を知り、ノックして入室するとビデオ通話で団らんできるWebアプリケーションです。話題カード100選と、退室後のGeminiによる安心見守りレポートで、会話のきっかけと振り返りを支えます。</p><p><b>目的：</b>「用事がないと電話しづらい」「見守りカメラには抵抗がある」という負担を減らすこと。ZoomやMicrosoft Teamsなどの既存のビデオ通話とは違う体験として、家族が気軽に集まり、団らんを過ごせる場所へと昇華させることを目指します。</p><p><b>プライバシーへの配慮：</b>ロビーに表示するのは在室者名と人数です。映像は同じドアの参加者へ届け、アプリは録画しません。</p></div>
+<h2>2.　解決する課題</h2>
+<h3>2.1.　対象ユーザー</h3>
+<div class="box"><p>・離れて暮らす親や祖父母の様子が気になる家族</p><p>・日々、家族の様子を見に行くことに負担を感じている人</p><p>・家族と気軽に顔を見て話したい高齢者本人</p><p>・見守りカメラに抵抗があり、自然に安否を確かめ合いたい人</p></div>
+<h3>2.2.　課題と根拠</h3>
+<div class="box"><p>毎日の訪問には時間や移動の負担があり、電話も「今忙しいかもしれない」「用事がないとかけづらい」とためらいがちです。一方、常設カメラは監視される抵抗感につながります。既存のビデオ会議の業務的な印象も、気軽な団らんにはなじみにくいと考えました。</p></div>
+<h3>2.3.　既存手法との違い</h3>
+<table><thead><tr><th>観点</th><th>従来の電話・カメラ・会議</th><th>となりドア</th></tr></thead><tbody><tr><td>声かけのタイミング</td><td>予定調整や事前の連絡が必要</td><td>ドアの明かりと在室表示で知る</td></tr><tr><td>過ごし方</td><td>用件や会議を中心に接続する</td><td>同じ部屋で過ごす感覚で団らん</td></tr><tr><td>見守り</td><td>訪問の負担や常時監視の抵抗感</td><td>実カメラで顔を確認し、入力メモを振り返る</td></tr></tbody></table>
+</section>
+<section>
+<h2>3.　Google技術の活用</h2>
+<h3>3.1.　使用したGoogle技術（少なくとも一つ選択）</h3>
+<p>☐ App Engine</p>
+<p>☐ Compute Engine</p>
+<p>☐ Google Kubernetes Engine（GKE）</p>
+<p>☑ Cloud Run</p>
+<p>☐ Firebase App Hosting</p>
+<p>☐ Firebase Hosting</p>
+<h3>3.2.　Google技術の活用例</h3>
+<table><thead><tr><th>使用技術</th><th>使用箇所</th><th>選定理由・メリット</th><th>デメリット</th></tr></thead><tbody><tr><td>Gemini API</td><td>退室後の安心見守りレポート要約。通話中の話題生成はTBW</td><td>時間・参加者・話題・気づきメモから、画面に表示しやすい構造化された要約を生成できる</td><td>APIの料金・遅延・失敗への配慮が必要。失敗時は簡易記録へ切替</td></tr><tr><td>Cloud Run</td><td>Web配信、REST API、WebSocketの統合ホスティング</td><td>HTTPSとリアルタイム通信を1つのコンテナで運用できる</td><td>在室情報はメモリ上にあるため、複数インスタンスへの拡張に追加設計が必要</td></tr><tr><td>Google STUN</td><td>WebRTCの直接接続の支援</td><td>異なるネットワーク間でブラウザ同士の接続を試みられる</td><td>直接接続が難しい環境ではTURNリレーを利用。実回線の接続検証が必要</td></tr></tbody></table>
+<h3>3.3.　Google技術を選定した理由</h3>
+<div class="box"><p>Cloud Runなら、カメラ利用に必要なHTTPS、ドアの在室同期に使うWebSocket、APIと画面配信をまとめて提供できます。限られた開発期間でも、サービス全体を公開しやすい点を重視しました。</p><p>Gemini APIは、参加者が入力したメモなどを、様子・話題・次回の提案として整理するために使います。映像や音声そのものは解析せず、非医療的な会話の記録として扱います。</p></div>
+</section>
+<section>
+<h2>4.　アーキテクチャ図</h2>
+<img src="../public/assets/architecture_submission.png" alt="となりドア アーキテクチャ図">
+<p>4つのドアはそれぞれ独立したルームです。Expressは接続情報を交換し、映像・音声は直接接続またはTURNリレーで同室の参加者へ届けます。事前の静止画気配抽出・デモ人物は廃止しています。</p>
+<h2>5.　プロジェクトをデプロイしたURL</h2>
+<div class="box"><p><b>アプリケーションURL：</b><br/>https://gdg-hackathon-752978143113.asia-northeast1.run.app/</p><p><b>仮想カメラでの入室URL：</b><br/>https://gdg-hackathon-752978143113.asia-northeast1.run.app/?door=chanoma&amp;cam=virtual</p></div>
+</section>
+<section>
+<h1>【任意項目】</h1>
+<h2>6.　動作確認の方法</h2>
+<h3>6.1.　テストアカウント情報</h3>
+<table><thead><tr><th>項目</th><th>内容</th></tr></thead><tbody><tr><td>アクセスURL</td><td>https://gdg-hackathon-752978143113.asia-northeast1.run.app/</td></tr><tr><td>アカウント名</td><td>任意の表示名を入力可能。例：yoikoarmor、suzukimain</td></tr><tr><td>パスワード</td><td>不要。アカウント名は表示名で、認証機能ではありません。</td></tr></tbody></table>
+<h3>6.2.　動作確認手順</h3>
+<div class="box"><p>1. 上記URLを2端末、または2つのブラウザで開き、表示名を入力します。</p><p>2. 一方で任意のドアをノックして入室します。入室したドアの明かりが灯り、1人の在室表示になることを確認します。</p><p>3. もう一方で同じドアに入室し、相手の映像と2人の在室表示を確認します。カメラがない場合は仮想カメラで参加できます。</p><p>4. 「話題カード100選から引く」を押し、同室者にも同じカードが表示されることを確認します。Geminiによる通話中の話題生成はTBWです。</p><p>5. 気づきメモを入力して退室し、安心見守りレポートとノートを確認します。AIに接続できない場合は簡易記録になります。</p></div>
+<h3>6.3.　サンプルデータ</h3>
+<div class="box"><p><b>4つのドア：</b>実家の茶の間（chanoma）、日当たりのいい縁側（engawa）、夕暮れの台所・ダイニング（kitchen）、みんなの趣味部屋（hobby）。固定の在室者は設定せず、実際の入室に応じて点灯します。</p><p><b>話題カード：</b>食事・料理、季節・天気、昔話・思い出など、10カテゴリ・100件を用意しています。</p></div>
+</section>
+<section>
+<h2>7.　アプリの詳細や機能に関する自由記述</h2>
+<h3>7.1.　主な機能</h3>
+<table><thead><tr><th>#</th><th>機能</th><th>内容</th></tr></thead><tbody><tr><td>1</td><td>4つの独立ルーム</td><td>入室している人の名前と人数を表示。空室は消灯します。</td></tr><tr><td>2</td><td>ビデオ団らん</td><td>実カメラ、または仮想の茶の間映像で参加。仮想カメラでは本人の顔は映りません。</td></tr><tr><td>3</td><td>話題カード100選</td><td>カテゴリで絞り込み、引いたカードを同室の参加者へ共有。Gemini話題生成はTBWです。</td></tr><tr><td>4</td><td>安心見守りレポート・ノート</td><td>時間・参加者・話題・気づきメモから要約。元気度は非医療的な目安で、根拠がなければ未評価。履歴はメモリ上に最大100件で、再起動すると失われます。</td></tr></tbody></table>
+<h3>7.2.　今後の展望</h3>
+<div class="box"><p>・家族グループの認証・招待と、Firestoreによる履歴の永続化</p><p>・高齢者が使いやすい、タブレットの常設モード</p><p>・導入済みTURNの実回線検証と接続品質の改善</p></div>
+<h1>【採点外項目】</h1>
+<h2>8.　AIをどの場面でどう使用したか、なぜその場面で使用したか</h2>
+<div class="box"><p><b>サービス機能：</b>Gemini APIを退室後の記録の要約に使っています。入力メモなどを読みやすく整理し、次回の話題を提案するためです。通話中の話題カード生成はTBWです。</p><p><b>開発段階：</b>Codex、Claude Code、Antigravityを、設計の検討、コード生成、エラー調査、結合確認、話題データや図の作成に使いました。共通のAPI契約を参照しながら、バックエンド・フロントエンド・検証を分担しました。</p></div>
+</section>
+<section>
+<h2>9.　自分たちが開発を通して何を得て、どれくらい成長できたのか</h2>
+<p><b>何が必要で、何がいらないかを取捨選択する力</b></p>
+<div class="box"><p>最初の案は、今よりも大きなシステムでした。ただ、そのままでは目的と手段が入れ替わり、使う人をないがしろにした設計になりかねませんでした。そこで「この機能は本当に必要か」「使う人が望んでいるものは何か」を考え、機能の追加と削減を繰り返しました。その結果、最小限の機能で最大限の価値を提供することを目指した、今の設計になりました。</p></div>
+<p><b>公開サービスの作成と共同開発を通じて学んだこと</b></p>
+<div class="box"><p>Cloud Runを使ってWebサービスを公開し、GitHubのリポジトリを共有しながら共同開発する経験を得ました。</p><p>一方で、今回はAIを使う際にアイデアを先行させすぎたため、AIにコードを書かせた後のバグ修正に手間取りました。これは、自分たちが機能全体を十分に把握できていなかったことの表れだと感じています。AIを使う場合も、これまでの開発と同じように、機能定義と情報のやり取りのパイプラインをしっかり組み立ててから取り組むべきだと学びました。</p></div>
+</section>
+</body></html>

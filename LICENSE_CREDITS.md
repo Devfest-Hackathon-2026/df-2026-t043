@@ -6,7 +6,7 @@ GDGoC Japan Hackathon 2026 提出用の使用ライブラリ・素材一覧で�
 
 | 名称 | バージョン | ライセンス | 用途 | 出典 URL |
 |---|---|---|---|---|
-| `@google/genai` | `^1.0.0` | Apache-2.0 | Google Gemini API (`gemini-2.5-flash`) 連携 | https://www.npmjs.com/package/@google/genai |
+| `@google/genai` | `^1.0.0` | Apache-2.0 | Google Gemini API（モデルは `GEMINI_MODEL` で設定）連携 | https://www.npmjs.com/package/@google/genai |
 | `express` | `^4.21.2` | MIT | Web アプリケーション・REST API サーバー | https://www.npmjs.com/package/express |
 | `ws` | `^8.18.0` | MIT | WebSocket リアルタイム通信・WebRTC シグナリング | https://www.npmjs.com/package/ws |
 | `dotenv` | `^16.4.7` | BSD-2-Clause | 環境変数（`.env`）の読み込み管理 | https://www.npmjs.com/package/dotenv |

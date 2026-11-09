@@ -5,7 +5,7 @@
 1. **4つのドア＝4つの独立したビデオ通話ルームインスタンス**
    - ロビーには4つのドアが並ぶ：
      - ドア1 (`chanoma`)：`🍵 実家の茶の間`
-     - ドア2 (`engawa`)：`🌼 日当たりのいい縁側`
+     - ドア2 (`engawa`)：`🌿 日当たりのいい縁側`
      - ドア3 (`kitchen`)：`🍲 夕暮れの台所・ダイニング`
      - ドア4 (`hobby`)：`🎨 みんなの趣味部屋`
    - **事前在室設定・気配抽出の廃止**：
@@ -20,15 +20,15 @@
    - 入室時はカメラ常時ON（実カメラ `📷 実カメラ` または Canvas描画の `🍵 バーチャル茶の間カメラ`）。
    - 通話画面の大きなメイン映像枠（`#remoteStage`）から、旧「おばあちゃん（デモ）家族シミュレーター」は**完全廃止**。
    - 自分1人で入室している間は「🏮 家族の入室を待っています」の待機カードを表示し、2人目以降の相手が同じドアに入室した瞬間に待機カードが消え、相手のWebRTCカメラ映像が大きく映る。
-   - ブラウザの自動再生ブロック（Autoplay Policy）発生時にはワンタップで音声・映像を再生復帰できるボタンを表示する。
+   - ブラウザの自動再生ブロック時の専用復帰ボタンは現在未実装。
 
 3. **団らん話題カード（100選デッキ ＋ Gemini生成［TBW］）**
    - `public/data/topics.json`（10カテゴリ・全100件）からランダムにカードを引いて（`GET /api/topics/random`）、WebSocket `share_topic` で同室の全員にリアルタイム共有する。
    - **Gemini による団らん話題カード生成機能はドキュメント・アーキテクチャ図上で `TBW`（To Be Written）表記**とする。
 
-4. **退室時の Gemini 2.5 Flash 安心見守りレポート＆見守りノート**
+4. **退室時の Gemini 安心見守りレポート＆見守りノート**
    - 退室時に通話時間・参加者・話した話題・気づきメモを `POST /api/summary` へ送信。
-   - `server/geminiService.js` が `@google/genai` SDK（`GEMINI_API_KEY` または Cloud Run 上の Vertex AI `GEMINI_VERTEX_PROJECT`）経由で `gemini-2.5-flash` を呼び出し、非医療的な会話の活気の目安（`vitalityScore`）、様子の要約（`mood`, `highlights`）、次回の話題提案（`nextTopicSuggestion`）を生成して「📓 安心見守りノート」に記録する。
+   - `server/geminiService.js` が `@google/genai` SDK（`GEMINI_API_KEY`）経由で `GEMINI_MODEL` に指定されたモデルを呼び出し、非医療的な会話の活気の目安（`vitalityScore`）、様子の要約（`mood`, `highlights`）、次回の話題提案（`nextTopicSuggestion`）を生成して「📓 安心見守りノート」に記録する。
 
 ---
 
@@ -38,4 +38,15 @@
   - **STEP 1**：4つのドアの明かりを見る（`GET /api/doors` + `doors_update`）
   - **STEP 2**：ノックして部屋に入る（`knock_door` → `enter_door` → `room_state`）
   - **STEP 3**：顔を見て、団らんする（WebRTC P2P + 話題カード100選抽選 / AI話題カード生成: TBW）
-  - **STEP 4**：安心をノートに残す（`POST /api/summary` → Gemini 2.5 Flash 要約）
+  - **STEP 4**：安心をノートに残す（`POST /api/summary` → Gemini 要約）
+
+## 現在の実装状態（2026-11-09確認）
+
+- GeminiはAPIキーで呼び出す。`GEMINI_MODEL` の既定値は `gemini-2.5-flash`。本番ヘルスで確認した設定は `gemini-3.5-flash-lite`。実際の生成成功・モデル性能をこの確認だけで保証しない。Vertex AI経路は現在未対応。
+- 話題カード100選の抽選・共有は実装済み。Gemini話題生成は**TBW**（画面ボタン無効）。内部APIとサービス関数は存在する。
+- 要約へ送るのは時間・参加者・話題・気づきメモ。映像・音声の解析は行わず、根拠のない元気度は未評価。話題生成失敗時は100選、要約失敗時は入力に基づく簡易記録にフォールバック。
+- 事前気配抽出とデモ人物は廃止。`analyzeDoorPresence` 関数は未使用で残存するが、対応REST API・UIは提供しない。
+- 自動再生ブロック時の専用復帰UIは未実装。TURN設定取得・期限付き資格情報は実装済みだが、実回線での接続検証は別途必要。
+- 散歩は有効化フラグなし。`GET /api/walk-config` は `{ apiKey, places }` を返し、景色表示にはMapsキーが必要。
+- 見守りノートはサーバーのメモリに最大100件を保持し、再起動で失われる。家族認証・Firestore永続化は未実装。
+- 実カメラでは顔を確認できる。バーチャル茶の間カメラも参加できるが、本人の顔は映さない。

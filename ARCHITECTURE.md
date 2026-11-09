@@ -22,15 +22,17 @@ flowchart LR
     R <--> M["インメモリの4ドアインスタンス・参加者・最新100記録"]
     R --> T["public/data/topics.json / 100件"]
   end
-  S -->|"サーバーからのみ / GoogleGenAI (API Key or Vertex AI)"| G["Gemini 2.5 Flash"]
+  S -->|"サーバーからのみ / GoogleGenAI (API Key)"| G["Gemini"]
   K["Secret Manager / 環境変数"] --> S
-  A <-->|"WebRTC 映像・音声 P2P (Google STUN)"| B
+  A <-->|"WebRTC 映像・音声 (STUN / 設定時TURNリレー)"| B
+  A <-->|"設定時"| TURN["TURNリレー（期限付き資格情報）"]
+  B <-->|"設定時"| TURN
 ```
 
 - **`server/index.js`**：`PORT`（既定 `8080`）、`0.0.0.0` で待受。Express が `public/`、REST API、同じ HTTP サーバー上の `/ws`（WebSocket）を提供する。
-- **`server/geminiService.js`**：`@google/genai` の `GoogleGenAI`（`GEMINI_API_KEY` または Cloud Run 上の Vertex AI `GEMINI_VERTEX_PROJECT`）を用いて、退室後の安心見守りレポート生成（`generateCareSummary`）および団らん話題カード生成（**TBW** / `generateDanranTopic`）を行う。事前気配抽出（`analyzeDoorPresence`）は廃止し、純粋な4ドア・ルームインスタンス方式に統一している。
+- **`server/geminiService.js`**：`@google/genai` の `GoogleGenAI`（`GEMINI_API_KEY`）を用いて、退室後の安心見守りレポート生成（`generateCareSummary`）および団らん話題カード生成（**TBW** / `generateDanranTopic`）を行う。事前気配抽出は廃止。`analyzeDoorPresence` 関数は残存するが未使用で、対応するREST API・画面は提供しない。
 - **`public/data/topics.json`**：100件の初期話題カードデッキ（10カテゴリ）。
-- **`public/index.html`, `public/styles.css`, `public/app.js`**：4つのドアが並ぶ廊下（ロビー）UI、WebRTC ピア接続（相手専用メイン映像枠＋自動再生ブロック時のワンタップ復帰）、実カメラ／バーチャル茶の間カメラ切替、話題カードデッキ、見守りノートを描画する。サーバーは映像・音声を中継・録画しない。
+- **`public/index.html`, `public/styles.css`, `public/app.js`**：4つのドアが並ぶ廊下（ロビー）UI、WebRTC ピア接続（相手専用メイン映像枠。自動再生ブロック時の専用復帰UIは未実装）、実カメラ／バーチャル茶の間カメラ切替、話題カードデッキ、見守りノートを描画する。アプリのExpressサーバーは映像・音声を中継・録画しない。TURN利用時は別のリレーサーバーが暗号化されたメディア通信を中継する。
 
 ---
 
@@ -46,7 +48,7 @@ flowchart LR
    - 同じドアに入室した参加者同士で WebSocket `webrtc_signal` により SDP/ICE を交換し、WebRTC で双方向ビデオ通話を行う。1人入室時は提灯の待機カードを表示し、2人目が入室した瞬間に待機カードを隠して相手のカメラ映像をメイン枠に表示する。
    - 話題カードは100選からランダムに引く（`GET /api/topics/random`）ことができ、`share_topic` で同室者全員へリアルタイム同期する（※Gemini による動的話題カード生成は **TBW**）。
 4. **STEP 4：安心をノートに残す（退室・見守り要約）**
-   - 退室時に通話時間・参加者・話した話題・気づきメモを `POST /api/summary` に送り、Gemini 2.5 Flash が非医療的な会話の活気の目安（`vitalityScore`）、様子の要約（`mood`, `highlights`）、次回の話題提案（`nextTopicSuggestion`）を生成して「📓 安心見守りノート」に保存する。
+   - 退室時に通話時間・参加者・話した話題・気づきメモを `POST /api/summary` に送り、Gemini が非医療的な会話の活気の目安（`vitalityScore`）、様子の要約（`mood`, `highlights`）、次回の話題提案（`nextTopicSuggestion`）を生成して「📓 安心見守りノート」に保存する。
 
 ---
 
@@ -60,4 +62,15 @@ flowchart LR
 | `POST /api/topics/generate` | **TBW**（実装上は `{ topic, source }` を返し、AI未設定時は100選からフォールバック） |
 | `POST /api/summary` | 入力 `{ doorName, participants, durationSec, topicsUsed, notes }` から `{ summary, source }` を生成しメモリ上の見守りノートに保存 |
 | `GET /api/logs` | `{ logs: [...] }`。新しい順に最大100件の見守りノート記録を返す |
-| `GET /api/walk-config` | Street View 散歩設定（現在 `ENABLE_SHARED_WALK=true` 指定時のみ有効化、既定は一時無効） |
+| `GET /api/walk-config` | Street View 散歩設定（`{ apiKey, places }` を返す。現在は有効化フラグなし。キー未設定時は景色を表示できない） |
+
+## 現在の実装状態（2026-11-09確認）
+
+- GeminiはAPIキーで呼び出す。`GEMINI_MODEL` の既定値は `gemini-2.5-flash`。本番ヘルスで確認した設定は `gemini-3.5-flash-lite`。実際の生成成功・モデル性能をこの確認だけで保証しない。Vertex AI経路は現在未対応。
+- 話題カード100選の抽選・共有は実装済み。Gemini話題生成は**TBW**（画面ボタン無効）。内部APIとサービス関数は存在する。
+- 要約へ送るのは時間・参加者・話題・気づきメモ。映像・音声の解析は行わず、根拠のない元気度は未評価。話題生成失敗時は100選、要約失敗時は入力に基づく簡易記録にフォールバック。
+- 事前気配抽出とデモ人物は廃止。`analyzeDoorPresence` 関数は未使用で残存するが、対応REST API・UIは提供しない。
+- 自動再生ブロック時の専用復帰UIは未実装。TURN設定取得・期限付き資格情報は実装済みだが、実回線での接続検証は別途必要。
+- 散歩は有効化フラグなし。`GET /api/walk-config` は `{ apiKey, places }` を返し、景色表示にはMapsキーが必要。
+- 見守りノートはサーバーのメモリに最大100件を保持し、再起動で失われる。家族認証・Firestore永続化は未実装。
+- 実カメラでは顔を確認できる。バーチャル茶の間カメラも参加できるが、本人の顔は映さない。

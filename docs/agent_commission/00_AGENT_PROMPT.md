@@ -25,7 +25,7 @@
 
 ### 2. ソースコード＆テストファイルパス
 - バックエンド（Express + WebSocket 4ドア管理）: `c:\Users\yoiko\Downloads\GDG-hackathon\server\index.js`
-- Gemini 2.5 Flash サービス層（API Key & Vertex AI対応）: `c:\Users\yoiko\Downloads\GDG-hackathon\server\geminiService.js`
+- Gemini サービス層（APIキー対応 / モデルはGEMINI_MODELで設定）: `c:\Users\yoiko\Downloads\GDG-hackathon\server\geminiService.js`
 - フロントエンド（4ドアロビー＆WebRTC団らんルーム）:
   - `c:\Users\yoiko\Downloads\GDG-hackathon\public\index.html`
   - `c:\Users\yoiko\Downloads\GDG-hackathon\public\styles.css`
@@ -48,4 +48,15 @@
    - ドキュメント・アーキテクチャ図において、**Geminiによる団らん話題カード生成は `TBW`（To Be Written / 今後の実装予定）** として記載しています。
 3. **毎回の応答ルール**:
    - ユーザーへの毎回の応答ごとに、必ず `docs/HANDOVER.md` を最新状態に更新して提示してください。
+
+## 現在の実装状態（2026-11-09確認）
+
+- GeminiはAPIキーで呼び出す。`GEMINI_MODEL` の既定値は `gemini-2.5-flash`。本番ヘルスで確認した設定は `gemini-3.5-flash-lite`。実際の生成成功・モデル性能をこの確認だけで保証しない。Vertex AI経路は現在未対応。
+- 話題カード100選の抽選・共有は実装済み。Gemini話題生成は**TBW**（画面ボタン無効）。内部APIとサービス関数は存在する。
+- 要約へ送るのは時間・参加者・話題・気づきメモ。映像・音声の解析は行わず、根拠のない元気度は未評価。話題生成失敗時は100選、要約失敗時は入力に基づく簡易記録にフォールバック。
+- 事前気配抽出とデモ人物は廃止。`analyzeDoorPresence` 関数は未使用で残存するが、対応REST API・UIは提供しない。
+- 自動再生ブロック時の専用復帰UIは未実装。TURN設定取得・期限付き資格情報は実装済みだが、実回線での接続検証は別途必要。
+- 散歩は有効化フラグなし。`GET /api/walk-config` は `{ apiKey, places }` を返し、景色表示にはMapsキーが必要。
+- 見守りノートはサーバーのメモリに最大100件を保持し、再起動で失われる。家族認証・Firestore永続化は未実装。
+- 実カメラでは顔を確認できる。バーチャル茶の間カメラも参加できるが、本人の顔は映さない。
 ```
