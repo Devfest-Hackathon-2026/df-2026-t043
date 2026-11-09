@@ -1,9 +1,9 @@
 # 『となりドア (Tonari Door)』— プロジェクト引継ぎ資料 (HANDOVER.md)
 
-**最終更新日時**：2026年11月10日 00:29 JST
+**最終更新日時**：2026年11月10日 00:36 JST
 **対象**：チームメンバー（`yoikoarmor(小沢司)`, `suzukimain(鈴木崇博)`）および後続のすべてのAIエージェント
 
-> **最新状態（2026-11-10 GitHub反映済み）**：README・最終PDF・説明資料・表記整合を本体コミット `e1b4912` として `origin/main` へpush済み。本節はその結果追記。第13節参照。本番デプロイ操作は行っていない。
+> **最新状態（2026-11-10 提出先反映済み）**：開発リポジトリを別フォルダへcloneし、提出先 `Devfest-Hackathon-2026/df-2026-t043` のmainへコード・最終PDF・資料をpush済み（初回統合コミット `03ffd6f`）。提出先の初期履歴・MITライセンス・運営案内を保持。第14節参照。本番デプロイ操作は行っていない。
 
 ---
 
@@ -16,6 +16,7 @@
 | **メンバー** | **yoikoarmor(小沢司)、suzukimain(鈴木崇博)** |
 | **アプリ名 / カテゴリ** | **「となりドア (Tonari Door)」** / **1. 医療・福祉** |
 | **GitHub リポジトリ** | https://github.com/yoikoarmor/GDG-hackathon （本体変更 `e1b4912` はmainへpush済み。最新コミットは本資料の結果追記を含むgit logで確認） |
+| **提出用リポジトリ** | https://github.com/Devfest-Hackathon-2026/df-2026-t043 （公開・main。初回反映 `03ffd6f`、本資料の追記を別途同期） |
 | **本番デプロイURL (Cloud Run)** | https://gdg-hackathon-752978143113.asia-northeast1.run.app/ |
 | **ローカル実行URL** | `http://localhost:8080` （今回、常駐サーバーの起動状態は未確認。自動テストは別の一時ポートで実行） |
 | **コードフリーズ・提出締切** | **2026年11月10日 19:00 JST（厳守）** |
@@ -245,3 +246,14 @@ MDとHTMLは共通の説明内容を持つが、完全に同文ではない。�
 - `.gitattributes` でPDFをバイナリ指定。GitがPDF内部をテキストの空白違反として扱う問題を解消し、PDFのバイト列は変更していない。
 - README相対リンク、指定した目的・対象ユーザーの文言、PDFコピー一致、ステージ済み差分の `git diff --check` は合格。
 - この結果追記も別の文書コミットとして同じmainへ送信し、リモートHEADとの一致を最終確認する。アプリの追加改修・デプロイ操作はない。
+
+## 14. 大会提出リポジトリへの反映（2026年11月10日 00:36 JST）
+
+- ユーザーから「現在のリポジトリを一度cloneして、Devfest-Hackathon-2026/df-2026-t043にもpush」と明示依頼された。
+- 開発元 `https://github.com/yoikoarmor/GDG-hackathon.git` の `69d8277` を `C:\Users\yoiko\Documents\Codex\2026-11-09\new-chat\work\df-2026-t043-clone` へ通常のcloneで取得。`origin` は開発元のまま、提出先を `submission` リモートとして追加した。
+- 提出先mainの初期状態は `e9090a9` の1コミットで、README・MIT LICENSE・.gitignoreのみ。履歴に共通祖先がなかったため、両履歴を保持する通常のマージを実施し、強制pushは使っていない。
+- READMEと.gitignoreのadd/add競合を解消。READMEはプロダクト説明・本番URLを採用し、開発元・提出先の区別を追加。元の運営READMEは `docs/SUBMISSION_REPOSITORY_GUIDE.md` に保存。MIT LICENSEは保持し、提出先の追加ignoreパターンも統合した。これらの提出先固有ファイルは開発元と異なる。
+- 公開先へ履歴ごと送るため、到達可能なテキスト履歴137 blobで既知のGoogle APIキー・GitHubトークン・OpenAIキー・秘密鍵形式を照合し、一致なし。代表的な資格情報ファイルのコミット歴も確認した。これはすべての秘密情報の不在を保証する監査ではない。
+- 初回統合コミット `03ffd6f7c0bd6d73800569503e8d01e42ce16335` を `submission/main` へpush成功。提出先が `e9090a9` から進んだことを確認した。
+- この結果追記は開発元にもコミット・pushし、提出用cloneへ取り込んで再pushする。最終的にコード・PDF・資料が開発元と同じであること、両方の履歴が残ること、リモートHEADとローカルHEADが一致することを検証する。
+- アプリ実装・最終PDFの内容は変更していない。README相対リンク・ライセンス保持・git diff --checkを確認。アプリコード不変のためnpm test・PDF再レンダリングは繰り返さない。本番デプロイ操作は行っていない。
