@@ -25,7 +25,7 @@ async function runFrontendTests() {
     play() { return Promise.resolve(); }
   }
   class Stream {
-    constructor(tracks) { this.tracks = tracks; }
+    constructor(tracks = []) { this.tracks = tracks; }
     getTracks() { return this.tracks; }
     getVideoTracks() { return this.tracks.filter((t) => t.kind === 'video'); }
     getAudioTracks() { return this.tracks.filter((t) => t.kind === 'audio'); }

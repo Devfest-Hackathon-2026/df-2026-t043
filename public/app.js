@@ -1029,9 +1029,11 @@
     }
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     const video = h('video', { autoplay: true, playsinline: true });
+    const remoteStream = new MediaStream();
     const nameTag = h('figcaption', { class: 'name-tag' }, `-${name || '家族'}-`);
+    const playButton = h('button', { type: 'button', class: 'tile-play', hidden: true }, '映像を再生');
     const tile = h('figure', { class: 'video-tile tile-remote tile-connecting', dataset: { peer: peerId } },
-      video, nameTag, h('div', { class: 'reaction-layer' }));
+      video, nameTag, h('div', { class: 'reaction-layer' }), playButton);
     el.remoteStage.append(tile);
 
     peer = { pc, name: name || '家族', serverId, tile, video, nameTag, offered: false, pendingIce: [] };
@@ -1044,18 +1046,49 @@
     pc.addEventListener('icecandidate', (e) => {
       if (e.candidate) sendSignal({ kind: 'candidate', to: peerId, candidate: e.candidate }, peer.serverId);
     });
-    pc.addEventListener('track', (e) => {
-      const stream = e.streams[0] || new MediaStream([e.track]);
-      if (video.srcObject !== stream) video.srcObject = stream;
-      tile.classList.remove('tile-connecting');
-      video.play().catch(() => {});
+    function showVideo() {
+      if (!video.paused && video.videoWidth) tile.classList.remove('tile-connecting');
+    }
+    video.addEventListener('playing', showVideo);
+    video.addEventListener('resize', showVideo);
+    playButton.addEventListener('click', async () => {
+      const wasMuted = video.muted;
+      video.muted = false;
+      try {
+        await video.play();
+        playButton.hidden = true;
+      } catch {
+        video.muted = wasMuted;
+      }
+    });
+    pc.addEventListener('track', async ({ track }) => {
+      remoteStream.addTrack(track);
+      if (video.srcObject) return;
+      video.srcObject = remoteStream;
+      try {
+        await video.play();
+      } catch (error) {
+        if (error.name === 'NotAllowedError') {
+          video.muted = true;
+          try {
+            await video.play();
+            playButton.textContent = '音声をオン';
+          } catch { /* The button allows playback from a user gesture. */ }
+        }
+        playButton.hidden = false;
+      }
     });
     pc.addEventListener('connectionstatechange', () => {
+      if (state.peers.get(peerId) !== peer) return;
       if (pc.connectionState === 'connected') {
-        tile.classList.remove('tile-connecting');
+        tile.classList.remove('tile-connection-failed');
         toast(`📹 -${peer.name}-と顔を合わせました`);
       }
-      if (['failed', 'closed'].includes(pc.connectionState)) removePeer(peerId);
+      if (pc.connectionState === 'failed') {
+        tile.classList.remove('tile-connecting');
+        tile.classList.add('tile-connection-failed');
+      }
+      if (pc.connectionState === 'closed') removePeer(peerId);
     });
 
     if (state.room) {
