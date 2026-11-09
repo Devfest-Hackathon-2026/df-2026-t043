@@ -4,7 +4,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('node:http');
 const path = require('node:path');
-const { randomUUID, randomInt } = require('node:crypto');
+const { randomUUID, randomInt, createHmac } = require('node:crypto');
 const { WebSocketServer, WebSocket } = require('ws');
 const { generateDanranTopic, generateCareSummary, isGeminiConfigured, MODEL } = require('./geminiService');
 const { walkPlaces, createWalk, readWalkView } = require('./walkService');
@@ -139,6 +139,16 @@ app.use('/api', (req, res, next) => {
   next();
 });
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'tonari-door-danran', geminiConfigured: isGeminiConfigured(), model: MODEL, timestamp: new Date().toISOString() }));
+app.get('/api/rtc-config', (req, res) => {
+  const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+  const urls = (process.env.TURN_URLS || '').split(',').map((url) => url.trim()).filter((url) => /^turns?:[^\s]+$/.test(url));
+  if (urls.length && process.env.TURN_SHARED_SECRET) {
+    const username = `${Math.floor(Date.now() / 1000) + 7200}:${randomUUID()}`;
+    const credential = createHmac('sha1', process.env.TURN_SHARED_SECRET).update(username).digest('base64');
+    iceServers.push({ urls, username, credential });
+  }
+  res.json({ iceServers });
+});
 app.get('/api/doors', (req, res) => res.json({ doors: doorList() }));
 app.get('/api/walk-config', (req, res) => res.json({ apiKey: process.env.GOOGLE_MAPS_BROWSER_API_KEY || '', places: walkPlaces }));
 app.get('/api/topics/random', (req, res, next) => {

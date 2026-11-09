@@ -15,7 +15,14 @@
   // 定数・初期データ
   // ------------------------------------------------------------------
   const DEFAULT_ACCOUNT = 'yoikoarmor';
-  const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+  let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+  async function loadRtcConfig() {
+    try {
+      const config = await api('/api/rtc-config');
+      if (Array.isArray(config.iceServers) && config.iceServers.length) iceServers = config.iceServers;
+    } catch { /* Direct connections remain available when configuration cannot be loaded. */ }
+  }
   const VIDEO_CONSTRAINTS = { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' };
   const LS = {
     account: 'tonari.account',
@@ -1027,7 +1034,7 @@
       if (name && name !== peer.name) { peer.name = name; peer.nameTag.textContent = `-${name}-`; }
       return peer;
     }
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers });
     const video = h('video', { autoplay: true, playsinline: true });
     const nameTag = h('figcaption', { class: 'name-tag' }, `-${name || '家族'}-`);
     const tile = h('figure', { class: 'video-tile tile-remote tile-connecting', dataset: { peer: peerId } },
@@ -1331,6 +1338,7 @@
     state.mediaStarting = true;
     clearTimeout(accountTimer);
     audioCtx();
+    await loadRtcConfig();
 
     const transition = playDoorTransition(`おじゃまします`);
     let mode;
