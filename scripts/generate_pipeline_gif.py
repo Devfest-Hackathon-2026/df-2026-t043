@@ -31,7 +31,7 @@ STAGES = (
     (676, 600, 1240, 888),
     (40, 600, 604, 888),
 )
-TITLES = ("気配を抽出する", "ドア越しに気配が届く", "顔を見て、団らんする", "安心をノートに残す")
+TITLES = ("4つのドアの明かりを見る", "ノックして部屋に入る", "顔を見て、団らんする", "安心をノートに残す")
 COLORS = (BLUE, ORANGE, GREEN, INDIGO)
 
 
@@ -109,28 +109,13 @@ def stage_shell(draw, number, active):
     text(draw, (x1 + 122, y1 + 20), TITLES[number], 23, bold=True, max_width=420)
 
 
-def presence(draw):
-    text(draw, (62, 216), "親・実家側  →  Cloud Run  →  Gemini", 17, bold=True)
-    box(draw, (64, 249, 233, 362), "#F0E4D2")
-    person(draw, 112, 293, "#9C9980", elder=True)
-    box(draw, (159, 275, 214, 318), "#587597", radius=7)
-    draw.ellipse((174, 283, 200, 309), fill="#D8E4E9", outline="#FFFFFF", width=2)
-    centered(draw, 149, 341, "静止画1枚 ＋ ひとこと", 12)
-    text(draw, (253, 254), "本人が同意して送信", 17, bold=True)
-    text(draw, (253, 284), "AIが声かけタイミングを判定", 17, max_width=330)
-    box(draw, (250, 318, 580, 360), "#EAF0FA", radius=10)
-    text(draw, (264, 331), "◎ 声をかけるのにぴったり", 18, fill=BLUE, bold=True)
-    text(draw, (63, 379), "POST /api/doors/:id/presence", 16, fill=BLUE)
-    text(draw, (63, 410), "生画像は保存・配信せず、処理後に破棄", 17, bold=True, max_width=520)
-
-
-def lobby(draw, active, phase):
-    text(draw, (699, 216), "Cloud Run  →  WebSocket /ws  →  ロビー", 17, bold=True)
-    names = ("実家の茶の間", "縁側", "台所", "趣味部屋")
+def hallway_doors(draw, active, phase):
+    text(draw, (62, 216), "GET /api/doors  +  WebSocket /ws (doors_update)", 16, fill=BLUE, bold=True)
+    names = ("①茶の間", "②縁側", "③ダイニング", "④趣味部屋")
     for i, name in enumerate(names):
-        x = 724 + i * 130
-        lit = active or i == 3
-        glow = int(16 * math.sin(phase * math.pi)) if active else 0
+        x = 68 + i * 130
+        lit = i == 0
+        glow = int(16 * math.sin(phase * math.pi)) if active and lit else 0
         box(draw, (x - 9, 248, x + 89, 350), "#F6E2AE" if lit else "#EEE5D6", radius=10)
         box(draw, (x, 255, x + 80, 350), "#B78659", outline="#936540", width=2, radius=5)
         for offset in (18, 40, 62):
@@ -139,13 +124,28 @@ def lobby(draw, active, phase):
             (255, 218 + glow, 143) if lit else "#D8C3A0", radius=4)
         draw.line((x + 40, 267, x + 40, 305), fill="#B78659", width=3)
         draw.ellipse((x + 64, 321, x + 71, 328), fill="#FCE5A4")
-        centered(draw, x + 40, 357, name, 14)
-    box(draw, (698, 386, 1218, 426), "#F6E8C8", radius=9)
-    centered(draw, 958, 398, "-yoikoarmor-がくつろいでいます。", 20, bold=True)
+        centered(draw, x + 40, 357, name, 13)
+    box(draw, (62, 384, 582, 424), "#EAF0FA", radius=9)
+    centered(draw, 322, 396, "ドア1点灯：-yoikoarmor-がくつろいでいます。", 18, fill=BLUE, bold=True)
+
+
+def knock_and_enter(draw, active, phase):
+    text(draw, (699, 216), "knock_door  →  enter_door  →  room_state", 17, fill=ORANGE, bold=True)
+    box(draw, (702, 250, 910, 366), "#F6E8C8", outline="#CC843D", width=2, radius=10)
+    person(draw, 756, 296, "#9C9980", elder=True)
+    person(draw, 854, 296, "#7B9DA7")
+    centered(draw, 806, 346, "同じドアに2人が入室", 13, bold=True)
+    text(draw, (932, 254), "4つの独立ルームインスタンス", 17, bold=True)
+    text(draw, (932, 284), "入ったドアだけ明かりが灯る", 16, max_width=290)
+    box(draw, (930, 316, 1218, 360), "#FFF3D4", outline="#DDB879", radius=10)
+    shift = round(2 * math.sin(phase * math.pi)) if active else 0
+    text(draw, (944, 329 - shift), "📹 カメラ常時ONで入室", 17, fill=ORANGE, bold=True)
+    box(draw, (698, 384, 1218, 424), "#F6E8C8", radius=9)
+    centered(draw, 958, 396, "-yoikoarmor-ほか計2人が団らん中", 19, bold=True)
 
 
 def danran(draw, active, phase):
-    text(draw, (699, 658), "WebRTC 映像・音声 P2P / Google STUN", 16, fill=GREEN, bold=True)
+    text(draw, (699, 658), "WebRTC 映像・音声 P2P (相手の映像 + 自分の映像)", 16, fill=GREEN, bold=True)
     box(draw, (700, 687, 918, 786), "#DDE7DE", outline="#99B3A1", radius=9)
     box(draw, (708, 694, 807, 777), "#F6EAD8", radius=5)
     box(draw, (812, 694, 910, 777), "#E9EDDF", radius=5)
@@ -158,9 +158,9 @@ def danran(draw, active, phase):
     text(draw, (960, 699 - shift), "団らん話題カード", 18, bold=True)
     text(draw, (960, 730 - shift), "「昔、好きだった遊びは？」", 15)
     text(draw, (699, 800), "実カメラ / バーチャル茶の間カメラ 常時ON", 16, bold=True)
-    text(draw, (699, 826), "knock_door → enter_door  |  share_topic で同室同期", 13, max_width=520)
+    text(draw, (699, 826), "webrtc_signal でP2P接続  |  share_topic で同室同期", 13, max_width=520)
     text(draw, (699, 848), "100選のランダム抽選: GET /api/topics/random", 13, fill=GREEN)
-    text(draw, (699, 868), "AI生成: POST /api/topics/generate", 13, fill=GREEN)
+    text(draw, (699, 868), "AI話題カード生成 (Gemini): TBW", 13, fill=MUTED)
 
 
 def notebook(draw):
@@ -188,15 +188,15 @@ def render(frame):
     for y in range(0, SIZE[1], 16):
         draw.line((0, y, SIZE[0], y), fill="#F0E9DD")
     text(draw, (40, 23), "となりドア", 34, bold=True)
-    text(draw, (249, 34), "離れて暮らす家族の、気配から始まる団らん。", 23, bold=True)
+    text(draw, (249, 34), "4つのドアから始まる、離れて暮らす家族のビデオ団らん。", 23, bold=True)
     text(draw, (42, 78), "電話のタイミングに迷う  /  監視カメラは抵抗がある  /  Web会議は業務的", 17, fill=MUTED)
-    text(draw, (42, 111), "気配を知る  →  顔を見て団らん  →  安心を残す", 18, fill=BLUE, bold=True)
+    text(draw, (42, 111), "ドアの明かりを見る  →  ノックして入室  →  顔を見て団らん  →  安心を残す", 18, fill=BLUE, bold=True)
     text(draw, (1025, 115), "医療・福祉 / 遠距離家族ケア", 13, fill=MUTED)
 
     for i in range(4):
         stage_shell(draw, i, stage == i)
-    presence(draw)
-    lobby(draw, stage == 1, phase)
+    hallway_doors(draw, stage == 0, phase)
+    knock_and_enter(draw, stage == 1, phase)
     danran(draw, stage == 2, phase)
     notebook(draw)
 
@@ -204,15 +204,15 @@ def render(frame):
     box(draw, (126, 473, 1154, 567), "#E8EEF8", outline="#B5C4E0", radius=16)
     box(draw, (143, 488, 484, 550), BLUE, radius=10)
     centered(draw, 313, 496, "Google Cloud Run", 23, fill="white", bold=True)
-    centered(draw, 313, 529, "Express + WebSocket /ws", 13, fill="white")
+    centered(draw, 313, 529, "Express + WebSocket /ws (4ドア管理)", 13, fill="white")
     box(draw, (532, 488, 935, 550), INDIGO, radius=10)
     centered(draw, 733, 496, "Gemini 2.5 Flash", 23, fill="white", bold=True)
-    centered(draw, 733, 529, "@google/genai  |  気配・話題・要約", 13, fill="white")
+    centered(draw, 733, 529, "@google/genai / Vertex AI  |  見守り要約 (話題生成: TBW)", 13, fill="white")
     arrow(draw, [(492, 518), (523, 518)], BLUE)
     text(draw, (958, 491), "映像音声はWebRTC", 15, bold=True)
     text(draw, (958, 519), "家族のブラウザ間へ", 15, fill=MUTED)
     # Light up the core box used by the active step.
-    core_rect = (139, 484, 488, 554) if stage == 1 else (528, 484, 939, 554)
+    core_rect = (139, 484, 488, 554) if stage in (0, 1) else (528, 484, 939, 554)
     box(draw, core_rect, fill=None, outline="#D7A450", width=3, radius=12)
     for points in (
         [(350, 440), (350, 473)], [(962, 440), (962, 473)],
@@ -234,7 +234,7 @@ def render(frame):
     for i in range(4):
         x = 530 + i * 27
         draw.ellipse((x, 922, x + 11, 933), fill=COLORS[i] if stage == i else "#D4C9B9")
-    text(draw, (42, 918), "気配だけを届ける。顔を見てつながる。", 16, bold=True)
+    text(draw, (42, 918), "ドアの明かりで気配を知り、顔を見てつながる。", 16, bold=True)
     text(draw, (718, 919), f"{stage + 1} / 4   {TITLES[stage]}", 16, fill=COLORS[stage], bold=True)
     return image
 

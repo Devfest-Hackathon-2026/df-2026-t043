@@ -7,11 +7,6 @@ const curatedTopics = require('../public/data/topics.json');
 const MODEL = (process.env.GEMINI_MODEL || '').trim() || 'gemini-2.5-flash';
 const VERTEX_PROJECT = (process.env.GEMINI_VERTEX_PROJECT || '').trim();
 const VERTEX_LOCATION = (process.env.GEMINI_VERTEX_LOCATION || '').trim() || 'asia-northeast1';
-const TIMING_LABELS = {
-  good: '◎ 声をかけるのにぴったり',
-  maybe: '○ 少しなら話せそう',
-  busy: '△ 今はそっとしておこう',
-};
 const stringSchema = { type: Type.STRING };
 const objectSchema = (properties) => ({ type: Type.OBJECT, properties, required: Object.keys(properties) });
 let inFlight = 0;
@@ -33,8 +28,8 @@ function requiredText(value, max = 500) {
   return value.trim();
 }
 
-// Neither prompts, images, model responses nor API error bodies are logged or retained.
-async function generateJson(instruction, data, schema, imageBase64) {
+// Neither prompts, model responses nor API error bodies are logged or retained.
+async function generateJson(instruction, data, schema) {
   if (!isGeminiConfigured() || inFlight >= 4) throw new Error('AI unavailable');
   inFlight += 1;
   const controller = new AbortController();
@@ -44,12 +39,6 @@ async function generateJson(instruction, data, schema, imageBase64) {
       ? { vertexai: true, project: VERTEX_PROJECT, location: VERTEX_LOCATION }
       : { vertexai: false, apiKey: process.env.GEMINI_API_KEY.trim() });
     const parts = [{ text: JSON.stringify(data) }];
-    if (imageBase64) {
-      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(imageBase64);
-      const raw = /^[A-Za-z0-9+/]+={0,2}$/.test(imageBase64);
-      if ((!match && !raw) || imageBase64.length > 5_600_000) throw new Error('Invalid image');
-      parts.push({ inlineData: { mimeType: match ? match[1] : 'image/jpeg', data: match ? match[2] : imageBase64 } });
-    }
     const deadline = new Promise((_, reject) => {
       timeout = setTimeout(() => { controller.abort(); reject(new Error('AI timeout')); }, 12_000);
     });
@@ -70,53 +59,6 @@ async function generateJson(instruction, data, schema, imageBase64) {
   } finally {
     clearTimeout(timeout);
     inFlight -= 1;
-  }
-}
-
-function inferFallbackPresence(mode, hint) {
-  if (mode === 'away') {
-    return { timingScore: 'busy', aiDetail: 'お出かけ中のようです。戻ってきたらまた声をかけましょう。' };
-  }
-  if (mode === 'busy') {
-    return { timingScore: 'busy', aiDetail: '今は手が離せないようです。少し時間をおいてみましょう。' };
-  }
-  if (/寝|眠|うとうと|お昼寝|風呂|入浴/.test(hint)) {
-    return { timingScore: 'busy', aiDetail: `${hint}のようです。今はそっとしておいて、あとで声をかけましょう。` };
-  }
-  if (/料理|掃除|洗濯|電話|支度|忙|作業|片付/.test(hint)) {
-    return { timingScore: 'maybe', aiDetail: `${hint}のようです。短めの声かけならちょうどよさそうです。` };
-  }
-  if (hint) {
-    return { timingScore: 'good', aiDetail: `${hint}の様子です。今なら気兼ねなく話しかけられます。` };
-  }
-  return { timingScore: 'good', aiDetail: '本人のくつろぎ設定を表示しています。画像や会話からの様子の確認は行っていません。' };
-}
-
-async function analyzeDoorPresence({ accountName, mode = 'relaxing', activityHint, imageBase64 } = {}) {
-  const name = text(accountName, 80) || '家族';
-  const hint = text(activityHint, 1000);
-  const inferred = inferFallbackPresence(mode, hint);
-  const fallback = {
-    statusText: mode === 'relaxing' ? `-${name}-がくつろいでいます。`
-      : mode === 'away' ? `-${name}-はお出かけ中です。` : `-${name}-は今、手が離せません。`,
-    timingScore: inferred.timingScore,
-    timingLabel: TIMING_LABELS[inferred.timingScore],
-    aiDetail: inferred.aiDetail,
-    source: 'fallback',
-  };
-  try {
-    if (!text(activityHint) && !imageBase64) return fallback;
-    const result = await generateJson(
-      '家族に声をかけるタイミングを提案する。timingScore は good / maybe / busy。画像は気配の抽象化だけに使い、個人識別・室内の詳細は記述しない。本人がbusy/awayを指定したらgoodにしない。aiDetailは短い提案とし、断定を避ける。',
-      { accountName: name, mode, activityHint: text(activityHint, 1000) },
-      objectSchema({ timingScore: { type: Type.STRING, enum: Object.keys(TIMING_LABELS) }, aiDetail: stringSchema }),
-      imageBase64,
-    );
-    if (!Object.hasOwn(TIMING_LABELS, result.timingScore)) throw new Error('Invalid timing');
-    const timingScore = mode === 'relaxing' ? result.timingScore : 'busy';
-    return { ...fallback, timingScore, timingLabel: TIMING_LABELS[timingScore], aiDetail: requiredText(result.aiDetail), source: 'gemini' };
-  } catch {
-    return fallback;
   }
 }
 
@@ -183,4 +125,4 @@ async function generateCareSummary({ doorName, participants = [], durationSec = 
   }
 }
 
-module.exports = { analyzeDoorPresence, generateDanranTopic, generateCareSummary, isGeminiConfigured, MODEL };
+module.exports = { generateDanranTopic, generateCareSummary, isGeminiConfigured, MODEL };
