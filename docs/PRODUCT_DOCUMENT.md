@@ -11,7 +11,7 @@
 「となりドア」
 
 - カテゴリ：医療・福祉
-- GitHub リポジトリ URL：https://github.com/yoikoarmor/GDG-hackathon
+- GitHub リポジトリ URL：https://github.com/Devfest-Hackathon-2026/df-2026-t043
 
 # 【必須項目】
 
